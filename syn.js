@@ -1,0 +1,1 @@
+const fs=require('fs');const s=fs.readFileSync('work/script.txt','utf8');try{new (Object.getPrototypeOf(async function(){}).constructor)(s);console.log('SYNTAX OK')}catch(e){console.log('ERR',e.message)}
