@@ -31,6 +31,7 @@ button:hover,select:hover{border-color:var(--accent)}
 button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,[contenteditable]:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 button.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);font-weight:600}
 button .sw{display:inline-block;width:10px;height:10px;background:var(--markup);margin-right:6px;vertical-align:-1px}
+.chk{display:inline-flex;align-items:center;gap:5px;font-size:13px;color:var(--fg);cursor:pointer}
 .stat{margin-left:auto;color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
 .panes{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:12px;align-items:start}
 @media (max-width:900px){.panes{grid-template-columns:minmax(0,1fr)}}
@@ -92,6 +93,7 @@ details.setup summary{padding:8px 12px;cursor:pointer;font-size:13px;color:var(-
     <button id="bOpen">Open draft</button>
     <button id="bSaveJson">Save draft</button>
     <button id="bReset" title="Go back to the document as it was when opened">Reset</button>
+    <label class="chk" title="Add a last page listing every change by the original page and line"><input type="checkbox" id="cChg" checked> Change page</label>
     <button id="bPdf" class="primary">Save PDF</button>
     <input type="file" id="fileIn" accept=".json" hidden>
     <input type="file" id="pdfIn" accept="application/pdf,.pdf" hidden>
@@ -203,14 +205,15 @@ async function deflate(u8){
   if(typeof CompressionStream==='undefined') return null;
   try{const cs=new CompressionStream('deflate');const w=cs.writable.getWriter();w.write(u8);w.close();return new Uint8Array(await new Response(cs.readable).arrayBuffer());}catch(e){return null;}
 }
-async function buildPDF(m){
+async function buildPDF(m,orig){
   const pages=layout(m), enc=new TextEncoder();
+  const sheets=[...pages.map(pg=>pageItems(m,pg)), ...changePageItems(m,chgList(m,orig))];
   const fk=['reg','bold'], used={reg:new Map(),bold:new Map()}, fnt={reg:FONTS.reg,bold:FONTS.bold};
   const hex=(s,k)=>{let o='<';for(const ch of s){let cp=ch.codePointAt(0);let g=fnt[k].map[cp];if(g==null){cp=63;g=fnt[k].map[63];}used[k].set(g,cp);o+=g.toString(16).padStart(4,'0');}return o+'>';};
   const f=n=>(Math.round(n*100)/100).toString();
-  const contents=pages.map(pg=>{
+  const contents=sheets.map(its=>{
     let s='';
-    for(const it of pageItems(m,pg)){
+    for(const it of its){
       const base=792-(it.top+it.size*0.70);
       const put=(x,t,bold,red)=>{const k=bold?'bold':'reg'; s+=`BT /${bold?'F2':'F1'} ${it.size} Tf ${red?'0.75 0 0':'0 0 0'} rg 1 0 0 1 ${f(x)} ${f(base)} Tm ${hex(t,k)} Tj ET\n`;};
             if(it.segs){
@@ -231,9 +234,9 @@ async function buildPDF(m){
   const stream=async(id,dict,data,compress)=>{let d=data,extra='';if(compress){const z=await deflate(data);if(z){d=z;extra=' /Filter /FlateDecode';}}
     offs[id]=pos;w(`${id} 0 obj\n<< ${dict}${extra} /Length ${d.length} >>\nstream\n`);w(d);w('\nendstream\nendobj\n');};
   w('%PDF-1.5\n%\xE2\xE3\xCF\xD3\n');
-  const nPages=pages.length, pageBase=13;
+  const nPages=sheets.length, pageBase=13;
   obj(1,'<< /Type /Catalog /Pages 2 0 R >>');
-  obj(2,`<< /Type /Pages /Kids [${pages.map((_,i)=>(pageBase+2*i+1)+' 0 R').join(' ')}] /Count ${nPages} >>`);
+  obj(2,`<< /Type /Pages /Kids [${sheets.map((_,i)=>(pageBase+2*i+1)+' 0 R').join(' ')}] /Count ${nPages} >>`);
   const fd=[[3,'reg','LiberationMono'],[8,'bold','LiberationMono-Bold']];
   for(const [id,k,name] of fd){
     const F=fnt[k], ff=b64u8(F.b64);
@@ -257,6 +260,134 @@ async function buildPDF(m){
   const out=new Uint8Array(pos); let o=0; for(const c of chunks){out.set(c,o);o+=c.length;}
   return out;
 }
+/* ---------- change tracker: drafter notations keyed to the ORIGINAL page and line ---------- */
+let chgOn=true;
+/* Words of a model: each has its text (t), the global line it starts on (line) and ends on (end), whether it is struck through (s),
+   and whether a space came before it (sp). Trailing , ; : . are split off as their own token, so "approved," -> approved + "," */
+function wordsOf(m){
+  const raw=[]; let ln=0;
+  for(const p of m.paras){
+    let cur=null;
+    for(const L of wrapPara(p)){
+      for(const tk of L.toks){
+        if(!cur||tk.gap.length){cur={cells:[],line:ln,end:ln};raw.push(cur);}
+        for(const c of tk.cells)cur.cells.push(c);
+        cur.end=ln;
+      }
+      ln++;
+    }
+  }
+  const W=[], mk=(cells,line,end,sp)=>({t:cells.map(c=>c.c).join(''),s:cells.every(c=>c.s),line,end,sp});
+  for(const r of raw){
+    const t=r.cells.map(c=>c.c).join(''), k=(t.match(/(?<=[A-Za-z0-9])[,;:.]+$/)||[''])[0].length;
+    if(k&&k<t.length){W.push(mk(r.cells.slice(0,t.length-k),r.line,r.end,true));W.push(mk(r.cells.slice(t.length-k),r.end,r.end,false));}
+    else W.push(mk(r.cells,r.line,r.end,true));
+  }
+  return W;
+}
+const joinW=ws=>ws.map((w,i)=>(i&&w.sp?' ':'')+w.t).join('');
+const owCache=new WeakMap();
+function pageLine(m,i){const LY=m.layout; if(i<LY.firstN) return {page:1,line:i+1}; const r=i-LY.firstN; return {page:2+Math.floor(r/LY.perPage),line:r%LY.perPage+1};}
+/* word alignment (Myers diff on top of a common prefix/suffix trim): map[i] = index in b of a[i], or -1 */
+function matchWords(a,b){
+  const n=a.length,m=b.length,map=new Int32Array(n).fill(-1);
+  let s=0; while(s<n&&s<m&&a[s]===b[s]){map[s]=s;s++;}
+  let e=0; while(e<n-s&&e<m-s&&a[n-1-e]===b[m-1-e]){map[n-1-e]=m-1-e;e++;}
+  const A=a.slice(s,n-e),B=b.slice(s,m-e),N=A.length,M=B.length;
+  if(!N||!M) return map;
+  const MAX=Math.min(N+M,3000), off=MAX+1, V=new Int32Array(2*MAX+3), trace=[]; let done=-1;
+  for(let d=0;d<=MAX&&done<0;d++){
+    trace.push(V.slice(off-d-1,off+d+2));
+    for(let k=-d;k<=d;k+=2){
+      let x=(k===-d||(k!==d&&V[off+k-1]<V[off+k+1]))?V[off+k+1]:V[off+k-1]+1, y=x-k;
+      while(x<N&&y<M&&A[x]===B[y]){x++;y++;}
+      V[off+k]=x;
+      if(x>=N&&y>=M){done=d;break;}
+    }
+  }
+  if(done<0) return map;                       /* too different to align: the middle counts as replaced */
+  let x=N,y=M;
+  for(let d=done;d>=0;d--){
+    const v=trace[d], g=k=>v[k+d+1], k=x-y, pk=(k===-d||(k!==d&&g(k-1)<g(k+1)))?k+1:k-1, px=g(pk), py=px-pk;
+    while(x>px&&y>py){x--;y--;map[s+x]=s+y;}
+    x=px;y=py;
+  }
+  return map;
+}
+/* the notations, in original page/line order: [{text,page,line}] */
+function changeList(m,o){
+  let A=owCache.get(o); if(!A){A=wordsOf(o);owCache.set(o,A);}
+  const B=wordsOf(m), map=matchWords(A.map(w=>w.t),B.map(w=>w.t)), inB=new Uint8Array(B.length);
+  for(const j of map) if(j>=0) inB[j]=1;
+  const hunks=[]; let h=null, lastKeep=-1;
+  const cur=()=>h||(h={del:[],ins:[],prev:lastKeep,next:-1});
+  const flush=nx=>{if(h){h.next=nx;hunks.push(h);} h=null;};
+  let i=0,j=0;
+  while(i<A.length||j<B.length){
+    if(i<A.length&&map[i]<0){cur().del.push(i);i++;}                              /* word gone from the text */
+    else if(j<B.length&&!inB[j]){if(!B[j].s)cur().ins.push(j);j++;}               /* new word (new text that is already struck nets out to nothing) */
+    else{ if(!A[i].s&&B[j].s)cur().del.push(i); else{flush(i);lastKeep=i;} i++;j++; }  /* same word: newly struck counts as deleted */
+  }
+  flush(-1);
+  const isP=t=>/^[,;:.]+$/.test(t);
+  for(const h of hunks){      /* slide a plain deletion right so it starts on a word, not on the comma before it: ", mutual, assessment" -> "mutual, assessment," */
+    if(h.ins.length||!h.del.length||!h.del.every(k=>map[k]<0)) continue;
+    let g=0; while(g++<60&&isP(A[h.del[0]].t)&&h.next>=0&&h.next<A.length&&A[h.next].t===A[h.del[0]].t&&!hunks.some(x=>x!==h&&x.prev===h.next)){h.del.shift();h.del.push(h.next);h.next++;}
+  }
+  const at=(a,b)=>{const p=pageLine(o,a),q=pageLine(o,b);
+    if(p.page===q.page) return p.line===q.line?`Page ${p.page}, Line ${p.line}`:`Page ${p.page}, Lines ${p.line}-${q.line}`;
+    return `Page ${p.page}, Line ${p.line} through Page ${q.page}, Line ${q.line}`;};
+  const q=s=>'"'+s+'"', qe=s=>'"'+(/[.,;:]$/.test(s)?s:s+'.')+'"';               /* closing period goes inside the quote, unless the text already ends in punctuation */
+  return hunks.map(h=>{
+    const dw=h.del.map(k=>A[k]), insT=joinW(h.ins.map(k=>B[k])); let text,pos;
+    if(dw.length){
+      const both=h.ins.length>0, f=both?q:qe;
+      const what=dw.length>14?`beginning with ${q(joinW(dw.slice(0,3)))} through ${f(joinW(dw.slice(-3)))}`:f(joinW(dw));
+      pos=at(dw[0].line,dw[dw.length-1].end); text=`${pos}, strike ${what}`+(both?` and insert ${qe(insT)}`:'');
+    }else if(h.prev>=0){
+      const p=A[h.prev], lead=/^[,;:.]+$/.test(p.t)&&h.prev>0?[A[h.prev-1],p]:[p];     /* anchor on "state," rather than a bare comma */
+      pos=at(p.end,p.end); text=`${pos}, after ${q(joinW(lead))} insert ${qe(insT)}`;
+    }else{const n=A[h.next]; pos=at(n.line,n.line); text=`${pos}, before ${q(n.t)} insert ${qe(insT)}`;}
+    const pl=pageLine(o,dw.length?dw[0].line:(h.prev>=0?A[h.prev].end:A[h.next].line));
+    return {text,page:pl.page,line:pl.line};
+  });
+}
+function chgList(m,o){o=o||original; if(!chgOn||!o||o===m||m.tracked===false||!hasDoc) return []; return changeList(m,o);}
+function wrapPlain(s,n,ind){
+  const out=[]; let line='', first=true;
+  const push=t=>{out.push((first?'':ind)+t);first=false;}, lim=()=>first?n:n-ind.length;
+  for(let w of s.split(' ')){
+    while(w.length>lim()){ if(line){push(line);line='';} push(w.slice(0,lim())); w=w.slice(lim()); }
+    if(!line) line=w; else if((line+' '+w).length<=lim()) line+=' '+w; else{push(line);line=w;}
+  }
+  if(line) push(line);
+  return out;
+}
+/* the change page(s) appended after the bill: one page unless there are too many notations to fit */
+function changePageItems(m,list){
+  if(!list.length) return [];
+  const X=63, CC=80, PITCH2=13, GAP=5, BOTTOM=742, sheets=[]; let its=null, top=0, onSheet=0;
+  const nota=[m.author&&('Redlined by '+m.author),m.note].filter(Boolean).join(' · ');
+  const begin=cont=>{
+    its=[]; sheets.push(its);
+    m.running.forEach((t,i)=>{const tp=22.7+12*i; its.push({x:63,top:tp,size:10,t}); its.push({x:XR-t.length*GLYPH,top:tp,size:10,t});});
+    const title='CHANGES TO THE ORIGINAL'+(cont?' (continued)':'');
+    its.push({x:306-title.length*0.6*12/2,top:84,size:12,bold:true,t:title});
+    if(!cont){const sub='Page and line numbers refer to the original version.'; its.push({x:306-sub.length*3,top:104,size:10,t:sub});}
+    its.push({x:63,top:757.1,size:10,t:'NERedliner',red:true});
+    if(nota) its.push({x:63,top:771,size:8,t:nota,red:true});
+    top=cont?116:132; onSheet=0;
+  };
+  begin(false);
+  for(const c of list){
+    const lines=wrapPlain(c.text,CC,'    '), h=lines.length*PITCH2+GAP;
+    if(top+h>BOTTOM&&onSheet>0) begin(true);
+    lines.forEach((t,k)=>its.push({x:X,top:top+k*PITCH2,size:10,t}));
+    top+=h; onSheet++;
+  }
+  return sheets;
+}
+
 /* ---------- PDF reader (for PDFs from the legislature's drafting system) ---------- */
 const PDFR=(()=>{
 const WSP=new Set([0,9,10,12,13,32]), DELIM='()<>[]{}/%';
@@ -619,13 +750,13 @@ function renderPreview(){
     w.innerHTML='<h3>Start with a PDF</h3><p>Open a bill or amendment PDF from the drafting system, or drag it onto this page. Line numbers, page breaks and page numbers are rebuilt as you edit.</p><div class="wbtns"><button id="wOpen" class="primary">Open PDF</button><button id="wBill">New bill</button><button id="wAm">New amendment</button></div>';
     prev.appendChild(w);$('wOpen').onclick=()=>$('pdfIn').click();$('wBill').onclick=()=>adopt(newDoc('bill'));$('wAm').onclick=()=>adopt(newDoc('amendment'));
     $('typeChip').textContent='No document open';$('stat').textContent='';$('proofH').textContent='Proof';return;}
-  const pages=layout(model);
+  const pages=layout(model), cl=chgList(model), sheets=[...pages.map(pg=>pageItems(model,pg)), ...changePageItems(model,cl)];
   const avail=Math.max(260,prev.clientWidth-28), scale=Math.min(1.25,avail/816);
   prev.textContent='';
-  for(const pg of pages){
+  for(const its of sheets){
     const box=document.createElement('div'); box.className='pagebox'; box.style.width=(816*scale)+'px'; box.style.height=(1056*scale)+'px';
     const pe=document.createElement('div'); pe.className='page'; pe.style.transform=`scale(${scale})`;
-    for(const it of pageItems(model,pg)){
+    for(const it of its){
       const e=document.createElement('div'); e.className='t'; e.style.left=it.x+'pt'; e.style.top=(it.top+0.064*it.size)+'pt';
       e.style.fontSize=it.size+'pt'; e.style.lineHeight=it.size+'pt';
       if(it.segs){for(const g of it.segs){const sp=document.createElement('span');sp.textContent=g.text;sp.style.cssText=`position:absolute;left:${g.x-it.x}pt;width:${g.w}pt;white-space:pre`;
@@ -638,7 +769,7 @@ function renderPreview(){
   const lines=pages.reduce((a,p)=>a+p.lines.length,0);
   let red=0; for(const p of model.paras) for(const r of p.runs) if(r.r) red+=r.t.split(/\s+/).filter(Boolean).length;
   $('typeChip').textContent=(TYPES[model.docType]||'Document')+(model.running[0]?' '+model.running[0]:'');
-  $('stat').textContent=`${pages.length} page${pages.length>1?'s':''} · ${lines} lines · ${red} red word${red===1?'':'s'}`;
+  $('stat').textContent=`${pages.length} page${pages.length>1?'s':''} · ${lines} lines · ${red} red word${red===1?'':'s'}`+(cl.length?` · ${cl.length} change${cl.length===1?'':'s'} listed`:'');
   $('proofH').textContent=`Proof (${model.layout.firstN} lines on page 1, then ${model.layout.perPage} per page)`;
 }
 let tm=null; function schedule(){clearTimeout(tm);tm=setTimeout(()=>{domToModel();renderPreview();},120);}
@@ -684,6 +815,7 @@ function lsGet(k){try{return localStorage.getItem(k)||'';}catch(e){return '';}}
 function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){}}
 function adopt(m,fromFileMeta){
   m.docType=m.docType||'other';
+  if(fromFileMeta) m.tracked=true;            /* opened from a PDF: changes are listed against it */
   m.author=lsGet('ne_author')||(fromFileMeta&&m.author)||'';
   m.note=m.note&&fromFileMeta&&!lsGet('ne_author')?m.note:today();
   hasDoc=true; document.body.classList.remove('nodoc'); model=m; original=clone(m); renderSetup(); modelToDom(); renderPreview();
@@ -721,7 +853,7 @@ function newDoc(kind){
     src.front=src.front.map(f=>f.t.startsWith('AMENDMENTS TO')?{...f,t:'AMENDMENTS TO LB___'}:f);
     src.paras=[{style:'indent',runs:[{t:'1. Strike the original sections and insert the following new sections:',b:false,u:false,s:false,r:false}]}];
   }
-  src.docType=kind; src.author=''; src.note=''; return src;
+  src.docType=kind; src.author=''; src.note=''; src.tracked=false; return src;   /* a blank template has no original to list changes against */
 }
 function markChanges(){
   const flat=m=>{const W=[];for(const p of m.paras){let cur=[];for(const r of p.runs)for(const c of r.t){if(c===' '){if(cur.length)W.push(cur);cur=[];}else cur.push({c,b:r.b,u:r.u,s:r.s,r:r.r});}if(cur.length)W.push(cur);}return W;};
@@ -749,5 +881,6 @@ $('bOpen').onclick=()=>$('fileIn').click();
 $('fileIn').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const o=JSON.parse(rd.result);if(!o.model||!o.model.paras)throw 0;model=o.model;original=o.original||clone(model);renderSetup();modelToDom();renderPreview();}catch(err){$('stat').textContent='That file is not a saved draft.';}};rd.readAsText(f);e.target.value='';};
 window.addEventListener('resize',()=>{clearTimeout(tm);tm=setTimeout(renderPreview,150);});
 document.body.classList.add('nodoc'); renderSetup(); renderPreview();
-window.__bill={layout,buildPDF,adopt,openPDF,newDoc,get model(){return model;},set model(m){model=m;}};
+$('cChg').addEventListener('change',e=>{chgOn=e.target.checked;renderPreview();});
+window.__bill={layout,buildPDF,adopt,openPDF,newDoc,changeList,get model(){return model;},set model(m){model=m;},get original(){return original;}};
 </script>
