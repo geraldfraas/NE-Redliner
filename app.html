@@ -666,7 +666,9 @@ function extractModel(pages){
     perPage.push(count); firstTops.push(firstTop);
   });
   for(const p of paras){
-    const out=[]; for(const r of p.runs){r.t=r.t.replace(/ {2,}/g,' ');const l=out[out.length-1];
+    const out=[]; for(const r of p.runs){
+      const pc=out.length?out[out.length-1].t.slice(-1):'';                      /* a double space right after a period is real ("Sec. 33.  Sections ..."), keep it; collapse any other run of spaces */
+      r.t=r.t.replace(/ {2,}/g,(m,o,s)=>m.length===2&&(o>0?s[o-1]:pc)==='.'?'  ':' ');const l=out[out.length-1];
       if(l&&l.b===r.b&&l.u===r.u&&l.s===r.s&&l.r===r.r)l.t+=r.t;else out.push(r);}
     out.forEach((r,i)=>{if(r.t===' '&&i>0&&i<out.length-1)for(const k of 'usr')if(out[i-1][k]&&out[i+1][k])r[k]=true;});
     const merged=[]; for(const r of out){const l=merged[merged.length-1];
