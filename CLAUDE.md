@@ -19,6 +19,7 @@ Owner: Gerald Fraas, Nebraska State Legislature. Browser tool to open a bill or 
 - A "Change page" checkbox next to Save PDF turns it off. Documents started from New bill / New amendment have no original, so they never get one (`model.tracked`).
 - Code: the "change tracker" section of `app.html` (`wordsOf`, `matchWords`, `changeList`, `changePageItems`), wired into `buildPDF` and `renderPreview`.
 - Not listed: splitting or merging paragraphs, and re-opening text that was struck.
+- "Set original…" (branch `set-original`): loads the true original bill PDF as the baseline, so the change page lists every difference from it even when the open file is an earlier redline that already had a change page. A change page attached to an opened PDF is ignored on open, not imported. "Clear original" goes back to measuring against the opened file. Opening another PDF clears it. Save draft keeps it. It warns when the original's running header (e.g. LB650) differs from the open document's.
 
 ## Source, build and test
 - The repo holds only `app.html` (plus this file and the README). The `src/`, `tools/` and `tests/` folders described in the README were never uploaded and cannot be recovered, so `python3 src/build.py` does not exist. Edit `app.html` directly; the fonts, cover templates and PDF reader are embedded in it.

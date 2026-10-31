@@ -46,7 +46,7 @@ details.setup{border-bottom:1px solid var(--line)}
 .welcome h3{margin:0 0 8px;font-size:16px}.welcome p{margin:0 0 16px;color:var(--muted);line-height:1.5}
 .wbtns{display:flex;flex-wrap:wrap;gap:8px}
 .nodoc .meta,.nodoc details.setup,.nodoc #editor,.nodoc .hint{display:none}
-.nodoc #bPdf,.nodoc #bSaveJson,.nodoc #bMark,.nodoc #bClear,.nodoc #bReset{opacity:.45;pointer-events:none}
+.nodoc #bPdf,.nodoc #bSaveJson,.nodoc #bMark,.nodoc #bClear,.nodoc #bReset,.nodoc #bOrig{opacity:.45;pointer-events:none}
 details.setup summary{padding:8px 12px;cursor:pointer;font-size:13px;color:var(--muted)}
 .setupbody{display:flex;flex-direction:column;gap:8px;padding:4px 12px 12px}
 .setupbody label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
@@ -93,10 +93,13 @@ details.setup summary{padding:8px 12px;cursor:pointer;font-size:13px;color:var(-
     <button id="bOpen">Open draft</button>
     <button id="bSaveJson">Save draft</button>
     <button id="bReset" title="Go back to the document as it was when opened">Reset</button>
+    <button id="bOrig" title="Load the original bill PDF. The change page then lists every difference from it, instead of only what you changed since opening this file.">Set original…</button>
+    <button id="bOrigClear" title="Go back to listing changes against the file you opened" hidden>Clear original</button>
     <label class="chk" title="Add a last page listing every change by the original page and line"><input type="checkbox" id="cChg" checked> Change page</label>
     <button id="bPdf" class="primary">Save PDF</button>
     <input type="file" id="fileIn" accept=".json" hidden>
     <input type="file" id="pdfIn" accept="application/pdf,.pdf" hidden>
+    <input type="file" id="origIn" accept="application/pdf,.pdf" hidden>
     <span class="stat" id="stat" aria-live="polite"></span>
   </div>
   <div class="panes">
@@ -262,6 +265,7 @@ async function buildPDF(m,orig){
 }
 /* ---------- change tracker: drafter notations keyed to the ORIGINAL page and line ---------- */
 let chgOn=true;
+let baseOrig=null, baseName='';   /* "Set original": a separate PDF the change page is measured against, instead of the file as opened */
 /* Words of a model: each has its text (t), the global line it starts on (line) and ends on (end), whether it is struck through (s),
    and whether a space came before it (sp). Trailing , ; : . are split off as their own token, so "approved," -> approved + "," */
 function wordsOf(m){
@@ -352,7 +356,7 @@ function changeList(m,o){
     return {text,page:pl.page,line:pl.line};
   });
 }
-function chgList(m,o){o=o||original; if(!chgOn||!o||o===m||m.tracked===false||!hasDoc) return []; return changeList(m,o);}
+function chgList(m,o){o=o||baseOrig||original; if(!chgOn||!o||o===m||m.tracked===false||!hasDoc) return []; return changeList(m,o);}
 function wrapPlain(s,n,ind){
   const out=[]; let line='', first=true;
   const push=t=>{out.push((first?'':ind)+t);first=false;}, lim=()=>first?n:n-ind.length;
@@ -771,7 +775,7 @@ function renderPreview(){
   const lines=pages.reduce((a,p)=>a+p.lines.length,0);
   let red=0; for(const p of model.paras) for(const r of p.runs) if(r.r) red+=r.t.split(/\s+/).filter(Boolean).length;
   $('typeChip').textContent=(TYPES[model.docType]||'Document')+(model.running[0]?' '+model.running[0]:'');
-  $('stat').textContent=`${pages.length} page${pages.length>1?'s':''} · ${lines} lines · ${red} red word${red===1?'':'s'}`+(cl.length?` · ${cl.length} change${cl.length===1?'':'s'} listed`:'');
+  $('stat').textContent=`${pages.length} page${pages.length>1?'s':''} · ${lines} lines · ${red} red word${red===1?'':'s'}`+(cl.length?` · ${cl.length} change${cl.length===1?'':'s'} listed`:'')+(baseOrig&&chgOn?` · against ${baseName}`:'');
   $('proofH').textContent=`Proof (${model.layout.firstN} lines on page 1, then ${model.layout.perPage} per page)`;
 }
 let tm=null; function schedule(){clearTimeout(tm);tm=setTimeout(()=>{domToModel();renderPreview();},120);}
@@ -820,6 +824,7 @@ function adopt(m,fromFileMeta){
   if(fromFileMeta) m.tracked=true;            /* opened from a PDF: changes are listed against it */
   m.author=lsGet('ne_author')||(fromFileMeta&&m.author)||'';
   m.note=m.note&&fromFileMeta&&!lsGet('ne_author')?m.note:today();
+  baseOrig=null; baseName=''; $('bOrigClear').hidden=true;      /* a newly opened document starts with its own file as the baseline */
   hasDoc=true; document.body.classList.remove('nodoc'); model=m; original=clone(m); renderSetup(); modelToDom(); renderPreview();
 }
 $('bReset').onclick=()=>{const keep={author:model.author,note:model.note};model=clone(original);Object.assign(model,keep);renderSetup();modelToDom();renderPreview();};
@@ -878,11 +883,24 @@ async function saveFile(name,data){
 }
 const docName=()=>(model.running[0]||'bill').replace(/[^\w.-]+/g,'_');
 $('bPdf').onclick=async()=>{if(!hasDoc)return;domToModel();saveFile(docName()+'.pdf',await buildPDF(model));};
-$('bSaveJson').onclick=()=>{domToModel();saveFile(docName()+'-draft.json',JSON.stringify({model,original},null,1));};
+$('bSaveJson').onclick=()=>{domToModel();saveFile(docName()+'-draft.json',JSON.stringify({model,original,base:baseOrig,baseName},null,1));};
 $('bOpen').onclick=()=>$('fileIn').click();
-$('fileIn').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const o=JSON.parse(rd.result);if(!o.model||!o.model.paras)throw 0;model=o.model;original=o.original||clone(model);renderSetup();modelToDom();renderPreview();}catch(err){$('stat').textContent='That file is not a saved draft.';}};rd.readAsText(f);e.target.value='';};
+$('fileIn').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const o=JSON.parse(rd.result);if(!o.model||!o.model.paras)throw 0;model=o.model;original=o.original||clone(model);baseOrig=o.base||null;baseName=o.baseName||'';$('bOrigClear').hidden=!baseOrig;renderSetup();modelToDom();renderPreview();}catch(err){$('stat').textContent='That file is not a saved draft.';}};rd.readAsText(f);e.target.value='';};
 window.addEventListener('resize',()=>{clearTimeout(tm);tm=setTimeout(renderPreview,150);});
 document.body.classList.add('nodoc'); renderSetup(); renderPreview();
 $('cChg').addEventListener('change',e=>{chgOn=e.target.checked;renderPreview();});
-window.__bill={layout,buildPDF,adopt,openPDF,newDoc,changeList,get model(){return model;},set model(m){model=m;},get original(){return original;}};
+$('bOrig').onclick=()=>$('origIn').click();
+$('origIn').onchange=async e=>{
+  const f=e.target.files[0]; e.target.value=''; if(!f||!hasDoc) return;
+  say('Reading '+f.name+'…');
+  try{
+    const m=await modelFromPDF(new Uint8Array(await f.arrayBuffer()));
+    baseOrig=m; baseName=f.name; model.tracked=true; chgOn=true; $('cChg').checked=true; $('bOrigClear').hidden=false;
+    renderPreview();
+    const a=(model.running[0]||'').trim(), b=(m.running[0]||'').trim();
+    say(a&&b&&a!==b?`Original set to ${f.name}, but it is ${b} and this document is ${a}. Check that it is the right file.`:`Changes are now listed against ${f.name}.`);
+  }catch(err){say('Could not read that PDF as the original. '+(err&&err.message?err.message:err));}
+};
+$('bOrigClear').onclick=()=>{baseOrig=null;baseName='';$('bOrigClear').hidden=true;renderPreview();say('Changes are listed against the file you opened.');};
+window.__bill={layout,buildPDF,adopt,openPDF,newDoc,changeList,get model(){return model;},set model(m){model=m;},get original(){return original;},get baseOrig(){return baseOrig;}};
 </script>
