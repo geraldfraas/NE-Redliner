@@ -4,7 +4,7 @@ Owner: Gerald Fraas, Nebraska State Legislature. Browser tool to open a bill or 
 
 ## What it does (all working and tested)
 - Opens PDFs from the drafting system (Antenna House, Liberation Mono) with its own reader (`src/reader.js`, `src/extract.js`). No PDF library; the sandbox could not reach CDNs or npm.
-- Detects bill vs. amendment. Layout presets (used for New bill / New amendment): bill 6 numbered lines on page 1 (cover), amendment 27, then 31 per page. A PDF that is opened takes its layout from the file itself (LB650 has 23 numbered lines on page 1). Last page takes the remainder.
+- Detects bill vs. amendment. Amendments: 27 numbered lines on page 1, then 31 per page. Bills: page 1 is content-driven (see "Page 1 of a bill" below), then 31 per page. Last page takes the remainder.
 - Line numbers, page breaks and `-n-` page numbers are rebuilt on every edit.
 - Underline = new text, strike-through = deleted text, red = changed text, bold, paragraph styles (indented, flush, hanging).
 - Saves a PDF with embedded Liberation Mono and fractional justification matching the originals.
@@ -19,6 +19,13 @@ Owner: Gerald Fraas, Nebraska State Legislature. Browser tool to open a bill or 
 - A "Change page" checkbox next to Save PDF turns it off. Documents started from New bill / New amendment have no original, so they never get one (`model.tracked`).
 - Code: the "change tracker" section of `app.html` (`wordsOf`, `matchWords`, `changeList`, `changePageItems`), wired into `buildPDF` and `renderPreview`.
 - Not listed: splitting or merging paragraphs, and re-opening text that was struck.
+
+## Page 1 of a bill (branch `page1-layout`)
+- Page 1 is the cover plus the summary ("A BILL FOR AN ACT ..."), and it ends with "Be it enacted by the people of the State of Nebraska," when that line lands on page 1; Section 1 then starts page 2. The old code gave a bill a fixed number of lines on page 1 (6 for New bill, or whatever the opened file happened to hold), which pushed a longer summary onto page 2 and let Section 1 start on page 1 after a shorter one. Page and line numbers, and so the change page, were wrong in both cases.
+- Now `layout()` fills page 1 up to what physically fits (last line starts at 738.1pt: 23 lines for a bill, 27 for an amendment, `pageOneCap`) and ends the page right after the enacting clause when `layout.enactBreak` is on (bills only). If the summary is long enough that the clause lands on page 2, as in LB650 (clause at page 2, line 7), there is no break and Section 1 follows on the same page.
+- `pageLine()` (change page notations) reads the real pagination of the original, so a short page 1 is respected.
+- Setup panel, for bills: "Most numbered lines on page 1" and a checkbox to turn the enacting-clause break off.
+- Evidence is thin: the break is what Gerald described plus the old 6-line bill template. LB650 never exercises it (its summary runs onto page 2), so it has not been checked against a real short-summary bill.
 
 ## Source, build and test
 - The repo holds only `app.html` (plus this file and the README). The `src/`, `tools/` and `tests/` folders described in the README were never uploaded and cannot be recovered, so `python3 src/build.py` does not exist. Edit `app.html` directly; the fonts, cover templates and PDF reader are embedded in it.
@@ -39,5 +46,6 @@ Owner: Gerald Fraas, Nebraska State Legislature. Browser tool to open a bill or 
 
 ## Known gaps / next ideas
 - Only tested on a bill (LB650) and an amendment. Resolutions and other types may read wrong; ask for more samples.
+- Check the page 1 rule against a real bill whose summary ends on page 1 (ask for one). Bills made by this tool before the `page1-layout` branch have a fixed `firstN` and no `enactBreak` in saved drafts, so they keep the old behavior.
 - Justified spacing matches the original exactly on LB650. It may still differ on documents not yet tested.
 - The README still lists `src/`, `tools/` and `tests/`. It should be corrected or the folders re-created.
