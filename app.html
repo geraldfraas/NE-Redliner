@@ -292,7 +292,7 @@ function wordsOf(m){
   }
   const W=[], mk=(cells,line,end,sp)=>({t:cells.map(c=>c.c).join(''),s:cells.every(c=>c.s),line,end,sp});
   for(const r of raw){
-    const t=r.cells.map(c=>c.c).join(''), k=(t.match(/(?<=[A-Za-z0-9])[,;:.]+$/)||[''])[0].length;
+    const t=r.cells.map(c=>c.c).join(''), k=((t.match(/^.*[A-Za-z0-9]([,;:.]+)$/)||[])[1]||'').length;   /* trailing , ; : . after a letter or digit (no lookbehind, which older Safari cannot parse) */
     if(k&&k<t.length){W.push(mk(r.cells.slice(0,t.length-k),r.line,r.end,true));W.push(mk(r.cells.slice(t.length-k),r.end,r.end,false));}
     else W.push(mk(r.cells,r.line,r.end,true));
   }
