@@ -292,7 +292,7 @@ function wordsOf(m){
   }
   const W=[], mk=(cells,line,end,sp)=>({t:cells.map(c=>c.c).join(''),s:cells.every(c=>c.s),line,end,sp});
   for(const r of raw){
-    const t=r.cells.map(c=>c.c).join(''), k=(t.match(/(?<=[A-Za-z0-9])[,;:.]+$/)||[''])[0].length;
+    const t=r.cells.map(c=>c.c).join(''), k=((t.match(/^.*[A-Za-z0-9]([,;:.]+)$/)||[])[1]||'').length;   /* trailing , ; : . after a letter or digit (no lookbehind, which older Safari cannot parse) */
     if(k&&k<t.length){W.push(mk(r.cells.slice(0,t.length-k),r.line,r.end,true));W.push(mk(r.cells.slice(t.length-k),r.end,r.end,false));}
     else W.push(mk(r.cells,r.line,r.end,true));
   }
@@ -910,7 +910,7 @@ $('fileIn').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new Fil
 window.addEventListener('resize',()=>{clearTimeout(tm);tm=setTimeout(renderPreview,150);});
 document.body.classList.add('nodoc'); renderSetup(); renderPreview();
 $('cChg').addEventListener('change',e=>{chgOn=e.target.checked;renderPreview();});
-const APP_VERSION='65fbf8a \u00b7 2026-11-01';   /* tools/make_index.py replaces this with the commit and date in the hosted copy; 'dev' shows no version */
+const APP_VERSION='c8f8402 \u00b7 2026-11-02';   /* tools/make_index.py replaces this with the commit and date in the hosted copy; 'dev' shows no version */
 $('foot').textContent='NERedliner'+(APP_VERSION!=='dev'?' \u00b7 version '+APP_VERSION:'')+' \u00b7 Your PDFs and edits stay in this browser; nothing is uploaded.';
 window.__bill={layout,buildPDF,adopt,openPDF,newDoc,changeList,get model(){return model;},set model(m){model=m;},get original(){return original;}};
 </script>
