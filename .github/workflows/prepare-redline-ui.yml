@@ -1,0 +1,106 @@
+name: Prepare redline UI changes
+on:
+  push:
+    branches: [redline-filenames-hide-new]
+    paths: [.github/workflows/prepare-redline-ui.yml]
+permissions:
+  contents: write
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/redline-filenames-hide-new'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: redline-filenames-hide-new
+      - name: Apply and validate preserved UI extension
+        shell: python
+        run: |
+          from pathlib import Path
+          import re, subprocess
+          p = Path('app.html')
+          source = p.read_text(encoding='utf-8')
+          marker = '/* NERedliner export naming and deferred creation controls */'
+          assert marker not in source, 'Changes already applied; refusing duplicate injection'
+          assert re.search(r'async\s+function\s+saveFile\s*\(', source), 'Expected saveFile implementation missing'
+          assert 'newSel' in source, 'Expected creation selector missing'
+          js = r'''
+          /* NERedliner export naming and deferred creation controls */
+          // Set true to restore the retained New bill / New amendment interface.
+          const NR_ENABLE_NEW_DOCUMENTS = false;
+          function nrRedlineFilename(info, date = new Date()) {
+            const bill = String(info || 'bill').replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/\s+/g, ' ').trim().replace(/[. ]+$/, '') || 'bill';
+            const mm = String(date.getMonth() + 1).padStart(2, '0');
+            const dd = String(date.getDate()).padStart(2, '0');
+            const yy = String(date.getFullYear()).slice(-2);
+            return `${bill} Redline ${mm}${dd}${yy}.pdf`;
+          }
+          const nrOriginalSaveFile = saveFile;
+          saveFile = async function(name, data) {
+            if (/\.pdf$/i.test(name)) {
+              const info = model && model.running && model.running[0];
+              name = nrRedlineFilename(info);
+            }
+            return nrOriginalSaveFile(name, data);
+          };
+          function nrHideDeferredCreation() {
+            if (NR_ENABLE_NEW_DOCUMENTS) return;
+            const selector = document.getElementById('newSel');
+            if (selector) selector.hidden = true;
+            document.querySelectorAll('button, a').forEach(control => {
+              const text = control.textContent.trim();
+              if (/^new\s+(bill|amendment)\b/i.test(text)) control.hidden = true;
+            });
+          }
+          nrHideDeferredCreation();
+          // The welcome panel is rebuilt dynamically; retain this behavior on reset.
+          const nrCreationObserver = new MutationObserver(nrHideDeferredCreation);
+          if (!NR_ENABLE_NEW_DOCUMENTS) nrCreationObserver.observe(document.body, { childList: true, subtree: true });
+          '''
+          test = r'''
+          const vm = require('node:vm');
+          const assert = require('node:assert/strict');
+          const calls = [];
+          const selector = { hidden: false };
+          const controls = ['New bill', 'New amendment', 'Open PDF'].map(textContent => ({ textContent, hidden: false }));
+          const ctx = {
+            saveFile: async (...args) => { calls.push(args); },
+            model: { running: ['LB650'] },
+            document: { body: {}, getElementById: () => selector, querySelectorAll: () => controls },
+            MutationObserver: class { observe() {} }
+          };
+          vm.createContext(ctx);
+          vm.runInContext(JS_SOURCE, ctx);
+          assert.equal(ctx.nrRedlineFilename('LB650', new Date(2026, 10, 2)), 'LB650 Redline 110226.pdf');
+          assert.equal(ctx.nrRedlineFilename('AM2839', new Date(2027, 0, 5)), 'AM2839 Redline 010527.pdf');
+          assert.equal(ctx.nrRedlineFilename('', new Date(2026, 10, 2)), 'bill Redline 110226.pdf');
+          assert.equal(selector.hidden, true);
+          assert.equal(controls[0].hidden, true);
+          assert.equal(controls[1].hidden, true);
+          assert.equal(controls[2].hidden, false);
+          (async () => {
+            await ctx.saveFile('old.pdf', 'pdf-data');
+            await ctx.saveFile('LB650-draft.json', 'draft-data');
+            assert.match(calls[0][0], /^LB650 Redline \d{6}\.pdf$/);
+            assert.equal(calls[0][1], 'pdf-data');
+            assert.equal(calls[1][0], 'LB650-draft.json');
+            assert.equal(calls[1][1], 'draft-data');
+          })().catch(error => { console.error(error); process.exitCode = 1; });
+          '''
+          import json
+          subprocess.run(['node', '-e', 'const JS_SOURCE = ' + json.dumps(js) + ';\n' + test], check=True)
+          p.write_text(source.rstrip() + '\n<script>\n' + js + '\n</script>\n', encoding='utf-8')
+          for script in re.findall(r'<script\b[^>]*>(.*?)</script>', p.read_text(encoding='utf-8'), re.S):
+              subprocess.run(['node', '--check'], input=script, text=True, check=True)
+      - name: Commit source and rebuild hosted page
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.html
+          git commit -m "Name exported PDFs as redlines and hide deferred creation controls"
+          python3 tools/make_index.py
+          python3 tools/make_index.py --check
+          git add index.html
+          git commit -m "Rebuild hosted page for redline filename and interface changes"
+          git push origin HEAD:redline-filenames-hide-new
