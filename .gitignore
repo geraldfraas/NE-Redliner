@@ -1,0 +1,22 @@
+# Operating-system files
+.DS_Store
+Thumbs.db
+
+# Python caches and virtual environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local environment variables / secrets
+.env
+.env.*
+!.env.example
+
+# Temporary files
+*.tmp
+*.bak
+*~
+
+# Local documents used for testing — do not commit their contents
+/local-documents/
