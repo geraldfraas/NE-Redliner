@@ -914,3 +914,38 @@ const APP_VERSION='dev';   /* tools/make_index.py replaces this with the commit 
 $('foot').textContent='NERedliner'+(APP_VERSION!=='dev'?' · version '+APP_VERSION:'')+' · Your PDFs and edits stay in this browser; nothing is uploaded.';
 window.__bill={layout,buildPDF,adopt,openPDF,newDoc,changeList,get model(){return model;},set model(m){model=m;},get original(){return original;}};
 </script>
+<script>
+
+/* NERedliner export naming and deferred creation controls */
+// Set true to restore the retained New bill / New amendment interface.
+const NR_ENABLE_NEW_DOCUMENTS = false;
+function nrRedlineFilename(info, date = new Date()) {
+  const bill = String(info || 'bill').replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/\s+/g, ' ').trim().replace(/[. ]+$/, '') || 'bill';
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  const yy = String(date.getFullYear()).slice(-2);
+  return `${bill} Redline ${mm}${dd}${yy}.pdf`;
+}
+const nrOriginalSaveFile = saveFile;
+saveFile = async function(name, data) {
+  if (/\.pdf$/i.test(name)) {
+    const info = model && model.running && model.running[0];
+    name = nrRedlineFilename(info);
+  }
+  return nrOriginalSaveFile(name, data);
+};
+function nrHideDeferredCreation() {
+  if (NR_ENABLE_NEW_DOCUMENTS) return;
+  const selector = document.getElementById('newSel');
+  if (selector) selector.hidden = true;
+  document.querySelectorAll('button, a').forEach(control => {
+    const text = control.textContent.trim();
+    if (/^new\s+(bill|amendment)\b/i.test(text)) control.hidden = true;
+  });
+}
+nrHideDeferredCreation();
+// The welcome panel is rebuilt dynamically; retain this behavior on reset.
+const nrCreationObserver = new MutationObserver(nrHideDeferredCreation);
+if (!NR_ENABLE_NEW_DOCUMENTS) nrCreationObserver.observe(document.body, { childList: true, subtree: true });
+
+</script>
