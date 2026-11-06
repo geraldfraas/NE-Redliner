@@ -1,0 +1,25 @@
+apply: success
+index: success
+test:  success
+
+{"newSelHidden":true,"toolbarButton":true,"welcomeButton":true,"chip":"Draft bill (not an LB)","previewPages":2,"previewWatermarks":2,"pdfHeader":"%PDF-","pdfRotated":true,"pdfGray":true,"plainRotated":false,"plainWatermarks":0,"draftName":"Draft Bill 110626.pdf","redlineName":"LB650 Redline 110226.pdf"}
+PASS New bill/New amendment selector still hidden
+PASS Toolbar button present
+PASS Start-screen button present
+PASS Preview has pages 2
+PASS Watermark in preview 2
+PASS Chip says draft bill Draft bill (not an LB)
+PASS PDF header %PDF-
+PASS PDF watermark rotated
+PASS PDF watermark gray
+PASS Non-draft PDF has no watermark
+PASS Non-draft preview has no watermark
+PASS Draft file name Draft Bill 110626.pdf
+PASS Redline file name unchanged LB650 Redline 110226.pdf
+PASS No page errors
+ALL CHECKS PASSED
+
+added 25 packages in 3s
+
+8 packages are looking for funding
+  run `npm fund` for details
