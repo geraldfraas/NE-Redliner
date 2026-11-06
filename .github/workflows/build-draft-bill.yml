@@ -1,0 +1,97 @@
+name: Build draft bill feature
+on:
+  push:
+    branches: [draft-bill-personal]
+    paths:
+      - .github/workflows/build-draft-bill.yml
+      - tools/draft-bill-extension.js
+      - tools/draft_bill_test.js
+permissions:
+  contents: write
+jobs:
+  build:
+    if: github.ref == 'refs/heads/draft-bill-personal'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: draft-bill-personal
+      - name: Apply feature to app.html
+        id: apply
+        continue-on-error: true
+        shell: python
+        run: |
+          from pathlib import Path
+          import re, traceback
+
+          def main():
+              p = Path('app.html')
+              s = p.read_text(encoding='utf-8')
+              old = "${red?'0.75 0 0':'0 0 0'} rg 1 0 0 1 ${f(x)} ${f(base)} Tm"
+              new = "${it.gray!=null?(it.gray+' '+it.gray+' '+it.gray):(red?'0.75 0 0':'0 0 0')} rg ${it.rot?'0.7071 0.7071 -0.7071 0.7071':'1 0 0 1'} ${f(x)} ${f(base)} Tm"
+              if new not in s:
+                  assert s.count(old) == 1, 'PDF writer line not found exactly once'
+                  s = s.replace(old, new)
+              begin = '<!-- draft-bill-extension:begin -->'
+              end = '<!-- draft-bill-extension:end -->'
+              s = re.sub(re.escape(begin) + r'.*?' + re.escape(end) + r'\s*', '', s, flags=re.S)
+              js = Path('tools/draft-bill-extension.js').read_text(encoding='utf-8')
+              assert '</script>' not in js
+              s = s.rstrip() + '\n' + begin + '\n<script>\n' + js + '\n</script>\n' + end + '\n'
+              p.write_text(s, encoding='utf-8')
+
+          try:
+              main()
+          except Exception:
+              Path('/tmp/apply-error.txt').write_text(traceback.format_exc())
+              raise
+      - name: Commit source and rebuild hosted page
+        id: index
+        if: steps.apply.outcome == 'success'
+        continue-on-error: true
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app.html
+          git commit -m "Add New draft bill with watermark (personal branch only)"
+          python3 tools/make_index.py
+          python3 tools/make_index.py --check
+      - name: Test in headless Chrome
+        id: test
+        if: steps.index.outcome == 'success'
+        continue-on-error: true
+        run: |
+          npm install --prefix /tmp/pp puppeteer-core > /tmp/npm.log 2>&1
+          node tools/draft_bill_test.js > /tmp/test-output.txt 2>&1; code=$?
+          cat /tmp/test-output.txt
+          exit $code
+      - name: Report and publish
+        if: always()
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          {
+            echo "apply: ${{ steps.apply.outcome }}"
+            echo "index: ${{ steps.index.outcome }}"
+            echo "test:  ${{ steps.test.outcome }}"
+            echo
+            cat /tmp/apply-error.txt 2>/dev/null || true
+            cat /tmp/test-output.txt 2>/dev/null || true
+            tail -n 20 /tmp/npm.log 2>/dev/null || true
+          } > /tmp/build-report.txt
+          if [ "${{ steps.test.outcome }}" = "success" ]; then
+            git add index.html
+            git commit -m "Rebuild hosted page with draft bill feature"
+            git rm -q -f --ignore-unmatch -- 'tools/rs-part-*.txt' tools/readable-source.txt
+            cp /tmp/build-report.txt tools/build-report.txt
+            git add tools/build-report.txt
+            git commit -m "Remove temporary source extracts and add build report"
+            git push origin HEAD:draft-bill-personal
+          else
+            git reset -q --hard origin/draft-bill-personal
+            cp /tmp/build-report.txt tools/build-report.txt
+            git add tools/build-report.txt
+            git commit -m "Add failed build report"
+            git push origin HEAD:draft-bill-personal
+          fi
