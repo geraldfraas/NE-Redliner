@@ -1,0 +1,36 @@
+name: Extract readable source
+on:
+  push:
+    branches: [draft-bill-personal]
+    paths: [.github/workflows/extract-readable-source.yml]
+permissions:
+  contents: write
+jobs:
+  extract:
+    if: github.ref == 'refs/heads/draft-bill-personal'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: draft-bill-personal
+      - name: Write readable copy
+        shell: python
+        run: |
+          import re
+          from pathlib import Path
+          src = Path('app.html').read_text(encoding='utf-8')
+          src = re.sub(r'[A-Za-z0-9+/=]{300,}', '<BASE64 REMOVED>', src)
+          out = []
+          for line in src.splitlines():
+              if len(line) > 1500:
+                  line = line[:400] + ' ...[line truncated, ' + str(len(line)) + ' chars]'
+              out.append(line)
+          Path('tools').mkdir(exist_ok=True)
+          Path('tools/readable-source.txt').write_text('\n'.join(out) + '\n', encoding='utf-8')
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tools/readable-source.txt
+          git commit -m "Add readable copy of app.html (font data removed)"
+          git push origin HEAD:draft-bill-personal
