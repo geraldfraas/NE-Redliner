@@ -1,0 +1,156 @@
+orationLine||n.style.textDecoration);
+  if(td&&td.includes('underline')) s.u=true;
+  if(td&&td.includes('line-through')) s.s=true;
+  const col=n.getAttribute('color')||(n.style&&n.style.color); if(col) s.r=isRedColor(col);
+  if(n.classList&&n.classList.contains('r')) s.r=true;
+  n.childNodes.forEach(c=>walk(c,s,runs));
+}
+function mergeRuns(runs){
+  const o=[]; for(const r of runs){const l=o[o.length-1]; if(l&&same(l,r)) l.t+=r.t; else o.push({t:r.t,b:!!r.b,u:!!r.u,s:!!r.s,r:!!r.r});} return o;
+}
+function domToModel(){
+  const paras=[];
+  ed.childNodes.forEach(n=>{
+    const runs=[]; walk(n,{b:false,u:false,s:false,r:false},runs);
+    const mr=mergeRuns(runs); if(!mr.length||!mr.some(r=>r.t.trim()))return;
+    paras.push({style:(n.nodeType===1&&n.dataset.pstyle)||'indent',runs:mr});
+  });
+  model.paras=paras;
+}
+function modelToDom(){
+  ed.textContent='';
+  for(const p of model.paras){
+    const d=document.createElement('div'); d.dataset.pstyle=p.style||'indent';
+    for(const r of p.runs){
+      let el=document.createTextNode(r.t);
+      const wrap=tag=>{const w=document.createElement(tag);w.appendChild(el);el=w;};
+      if(r.b)wrap('b'); if(r.u)wrap('u'); if(r.s)wrap('s');
+      if(r.r){const w=document.createElement('font');w.setAttribute('color',RED);w.appendChild(el);el=w;}
+      d.appendChild(el);
+    }
+    ed.appendChild(d);
+  }
+  if(!model.paras.length){const d=document.createElement('div');d.dataset.pstyle='indent';d.appendChild(document.createElement('br'));ed.appendChild(d);}
+}
+/* ---------- preview ---------- */
+function renderPreview(){
+  if(!hasDoc){prev.textContent='';const w=document.createElement('div');w.className='welcome';
+    w.innerHTML='<h3>Start with a PDF</h3><p>Open a bill or amendment PDF from the drafting system, or drag it onto this page. Line numbers, page breaks and page numbers are rebuilt as you edit.</p><div class="wbtns"><button id="wOpen" class="primary">Open PDF</button><button id="wBill">New bill</button><button id="wAm">New amendment</button></div>';
+    prev.appendChild(w);$('wOpen').onclick=()=>$('pdfIn').click();$('wBill').onclick=()=>adopt(newDoc('bill'));$('wAm').onclick=()=>adopt(newDoc('amendment'));
+    $('typeChip').textContent='No document open';$('stat').textContent='';$('proofH').textContent='Proof';return;}
+  const pages=layout(model), cl=chgList(model), sheets=[...pages.map(pg=>pageItems(model,pg)), ...changePageItems(model,cl)];
+  const avail=Math.max(260,prev.clientWidth-28), scale=Math.min(1.25,avail/816);
+  prev.textContent='';
+  for(const its of sheets){
+    const box=document.createElement('div'); box.className='pagebox'; box.style.width=(816*scale)+'px'; box.style.height=(1056*scale)+'px';
+    const pe=document.createElement('div'); pe.className='page'; pe.style.transform=`scale(${scale})`;
+    for(const it of its){
+      const e=document.createElement('div'); e.className='t'; e.style.left=it.x+'pt'; e.style.top=(it.top+0.064*it.size)+'pt';
+      e.style.fontSize=it.size+'pt'; e.style.lineHeight=it.size+'pt';
+      if(it.segs){for(const g of it.segs){const sp=document.createElement('span');sp.textContent=g.text;sp.style.cssText=`position:absolute;left:${g.x-it.x}pt;width:${g.w}pt;white-space:pre`;
+        sp.className=[g.b&&'b',g.u&&'u',g.s&&'s',g.r&&'r'].filter(Boolean).join(' ');e.appendChild(sp);}}
+      else {e.textContent=it.t; if(it.bold)e.style.fontWeight='700'; if(it.red)e.style.color='#c00000';}
+      pe.appendChild(e);
+    }
+    box.appendChild(pe); prev.appendChild(box);
+  }
+  const lines=pages.reduce((a,p)=>a+p.lines.length,0);
+  let red=0; for(const p of model.paras) for(const r of p.runs) if(r.r) red+=r.t.split(/\s+/).filter(Boolean).length;
+  $('typeChip').textContent=(TYPES[model.docType]||'Document')+(model.running[0]?' '+model.running[0]:'');
+  $('stat').textContent=`${pages.length} page${pages.length>1?'s':''} · ${lines} lines · ${red} red word${red===1?'':'s'}`+(cl.length?` · ${cl.length} change${cl.length===1?'':'s'} listed`:'');
+  $('proofH').textContent=`Proof (${pages[0].lines.length} line${pages[0].lines.length===1?'':'s'} on page 1, then ${model.layout.perPage} per page)`;
+}
+let tm=null; function schedule(){clearTimeout(tm);tm=setTimeout(()=>{domToModel();renderPreview();},120);}
+ed.addEventListener('input',schedule);
+ed.addEventListener('paste',e=>{e.preventDefault();const t=(e.clipboardData||window.clipboardData).getData('text/plain').replace(/\s*[\r\n]+\s*/g,' ');document.execCommand('insertText',false,t);});
+/* header / page 1 setup */
+const TYPES={bill:'Bill',amendment:'Amendment',other:'Other document'};
+function renderSetup(){
+  const box=$('setup'); box.textContent='';
+  const ts=document.createElement('select'); for(const [k,v] of Object.entries(TYPES)){const o=document.createElement('option');o.value=k;o.textContent=v;ts.appendChild(o);}
+  ts.value=model.docType||'other';
+  ts.addEventListener('change',()=>{model.docType=ts.value;Object.assign(model.layout,PRESET[ts.value]);renderSetup();renderPreview();});
+  {const l=document.createElement('label');l.append('Document type (sets the page 1 layout)',ts);box.appendChild(l);}
+  $('mAuthor').value=model.author||''; $('mNote').value=model.note||'';
+  const lab=(txt,el)=>{const l=document.createElement('label');l.append(txt,el);box.appendChild(l);};
+  const ta=document.createElement('textarea'); ta.rows=Math.max(2,model.running.length); ta.value=model.running.join('\n');
+  ta.addEventListener('input',()=>{model.running=ta.value.split('\n').map(s=>s.replace(/\s+$/,'')).filter(Boolean);renderPreview();});
+  lab('Running header (top of every page, one line each)',ta);
+  model.front.forEach((f,i)=>{const inp=document.createElement('input');inp.value=f.t;inp.addEventListener('input',()=>{f.t=inp.value;renderPreview();});lab(`Page 1 line ${i+1}${f.size>10?' (large)':''}`,inp);});
+  const n=document.createElement('input');n.type='number';n.min=1;n.max=31;n.value=model.layout.firstN;
+  n.addEventListener('input',()=>{const v=Math.max(1,Math.min(31,parseInt(n.value)||1));model.layout.firstN=v;renderPreview();});
+  lab(model.docType==='bill'?'Most numbered lines on page 1':'Numbered lines on page 1',n);
+  if(model.docType==='bill'){
+    const cb=document.createElement('input');cb.type='checkbox';cb.style.cssText='width:auto;flex:none';cb.checked=!!model.layout.enactBreak;
+    cb.addEventListener('change',()=>{model.layout.enactBreak=cb.checked;renderPreview();});
+    const l=document.createElement('label');l.style.cssText='flex-direction:row;align-items:center;gap:6px;text-transform:none;letter-spacing:0;font-size:12px';
+    l.append(cb,'Page 1 ends after “Be it enacted by the people of the State of Nebraska,” when that line lands on page 1');box.appendChild(l);
+  }
+}
+/* toolbar */
+document.querySelectorAll('.bar button').forEach(b=>b.addEventListener('mousedown',e=>e.preventDefault()));
+$('bBold').onclick=()=>{document.execCommand('bold');schedule();};
+$('bUl').onclick=()=>{document.execCommand('underline');schedule();};
+const strike=()=>{document.execCommand('strikeThrough');schedule();};
+$('bStr').onclick=strike;
+ed.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.shiftKey&&e.key.toLowerCase()==='x'){e.preventDefault();strike();}});
+$('bRed').onclick=()=>{
+  ed.focus(); const cur=document.queryCommandValue('foreColor');
+  document.execCommand('styleWithCSS',false,false);
+  document.execCommand('foreColor',false,isRedColor(cur)?'#000001':RED); schedule();
+};
+function curBlock(){const s=getSelection(); let n=s.anchorNode; while(n&&n.parentNode!==ed) n=n.parentNode; return n&&n.nodeType===1?n:null;}
+$('pstyle').addEventListener('change',e=>{const b=curBlock(); if(b){b.dataset.pstyle=e.target.value;schedule();} ed.focus();});
+document.addEventListener('selectionchange',()=>{const b=curBlock(); if(b) $('pstyle').value=b.dataset.pstyle||'indent';});
+$('bClear').onclick=()=>{domToModel();for(const p of model.paras)for(const r of p.runs)r.r=false;modelToDom();renderPreview();};
+$('bMark').onclick=()=>{domToModel();markChanges();modelToDom();renderPreview();};
+const today=()=>new Date().toLocaleDateString('en-US');
+function lsGet(k){try{return localStorage.getItem(k)||'';}catch(e){return '';}}
+function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){}}
+function adopt(m,fromFileMeta){
+  m.docType=m.docType||'other';
+  if(fromFileMeta) m.tracked=true;            /* opened from a PDF: changes are listed against it */
+  m.author=lsGet('ne_author')||(fromFileMeta&&m.author)||'';
+  m.note=m.note&&fromFileMeta&&!lsGet('ne_author')?m.note:today();
+  hasDoc=true; document.body.classList.remove('nodoc'); model=m; original=clone(m); renderSetup(); modelToDom(); renderPreview();
+}
+$('bReset').onclick=()=>{const keep={author:model.author,note:model.note};model=clone(original);Object.assign(model,keep);renderSetup();modelToDom();renderPreview();};
+$('mAuthor').addEventListener('input',e=>{model.author=e.target.value;lsSet('ne_author',e.target.value.trim());renderPreview();});
+$('mNote').addEventListener('input',e=>{model.note=e.target.value;renderPreview();});
+function say(msg){$('stat').textContent=msg;}
+async function openPDF(file){
+  if(!file)return;
+  say('Reading '+file.name+'…');
+  try{
+    const m=await modelFromPDF(new Uint8Array(await file.arrayBuffer()));
+    adopt(m,true);
+    say(`Opened ${file.name}: ${TYPES[m.docType]}, ${layout(model).length} pages`);
+    setTimeout(renderPreview,2500);
+  }catch(err){say('Could not open that PDF. '+(err&&err.message?err.message:err));}
+}
+$('bPdfOpen').onclick=()=>$('pdfIn').click();
+$('pdfIn').onchange=e=>{openPDF(e.target.files[0]);e.target.value='';};
+['dragenter','dragover'].forEach(ev=>document.addEventListener(ev,e=>{if(e.dataTransfer&&[...e.dataTransfer.types].includes('Files')){e.preventDefault();document.body.classList.add('drop');}}));
+['dragleave','drop'].forEach(ev=>document.addEventListener(ev,e=>{document.body.classList.remove('drop');}));
+document.addEventListener('drop',e=>{const f=e.dataTransfer&&e.dataTransfer.files[0];if(f){e.preventDefault();/\.pdf$/i.test(f.name)?openPDF(f):say('Drop a PDF file.');}});
+$('newSel').addEventListener('change',e=>{const k=e.target.value;e.target.value='';if(k)adopt(newDoc(k));});
+function newDoc(kind){
+  const src=clone(TEMPLATES[kind==='bill'?'lb':'am']);
+  if(kind==='bill'){
+    src.running=['LB___','2025'];
+    src.front=src.front.map(f=>f.t.startsWith('LEGISLATIVE BILL')?{...f,t:'LEGISLATIVE BILL ___'}:f.t.startsWith('Introduced by')?{...f,t:'Introduced by ____, __.'}:f.t.startsWith('Read first')?{...f,t:'Read first time ____'}:f.t.startsWith('Committee')?{...f,t:'Committee: ____'}:f);
+    src.paras=[{style:'hang',runs:[{t:'A BILL FOR AN ACT relating to ____; to amend section ____, Reissue Revised Statutes of Nebraska; and to repeal the original section.',b:false,u:false,s:false,r:false}]},
+               {style:'flush',runs:[{t:'Be it enacted by the people of the State of Nebraska,',b:false,u:false,s:false,r:false}]},
+               {style:'indent',runs:[{t:'Section 1. ',b:true,u:false,s:false,r:false},{t:'Type or paste the bill text here.',b:false,u:false,s:false,r:false}]}];
+  }else{
+    src.running=['AM____','LB___','__ - '+today()];
+    src.front=src.front.map(f=>f.t.startsWith('AMENDMENTS TO')?{...f,t:'AMENDMENTS TO LB___'}:f);
+    src.paras=[{style:'indent',runs:[{t:'1. Strike the original sections and insert the following new sections:',b:false,u:false,s:false,r:false}]}];
+  }
+  src.docType=kind; src.author=''; src.note=''; src.tracked=false; return src;   /* a blank template has no original to list changes against */
+}
+function markChanges(){
+  const flat=m=>{const W=[];for(const p of m.paras){let cur=[];for(const r of p.runs)for(const c of r.t){if(c===' '){if(cur.length)W.push(cur);cur=[];}else cur.push({c,b:r.b,u:r.u,s:r.s,r:r.r});}if(cur.length)W.push(cur);}return W;};
+  const key=w=>w.map(x=>x.c).join('');
+  const A=flat(original).map(key);
+  const newParas=model.paras.map(p=>({style:p.style,cs:p.runs.flatMap(r=>[...r.t].map(c=>({c,b:r

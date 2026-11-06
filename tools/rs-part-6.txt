@@ -1,0 +1,62 @@
+.b,u:r.u,s:r.s,r:r.r})))}));
+  const W=[];for(const p of newParas){let cur=[];for(const x of p.cs){if(x.c===' '){if(cur.length)W.push(cur);cur=[];}else cur.push(x);}if(cur.length)W.push(cur);}
+  const B=W.map(key), n=A.length, mm=B.length, w=mm+1, dp=new Uint16Array((n+1)*w);
+  for(let i=n-1;i>=0;i--)for(let j=mm-1;j>=0;j--)dp[i*w+j]=A[i]===B[j]?dp[(i+1)*w+j+1]+1:Math.max(dp[(i+1)*w+j],dp[i*w+j+1]);
+  const keep=new Array(mm).fill(false); let i=0,j=0;
+  while(i<n&&j<mm){ if(A[i]===B[j]){keep[j]=true;i++;j++;} else if(dp[(i+1)*w+j]>=dp[i*w+j+1])i++; else j++; }
+  W.forEach((wd,k)=>{if(!keep[k])wd.forEach(x=>x.r=true);});
+  model.paras=newParas.map(p=>({style:p.style,runs:mergeRuns(p.cs.map(x=>({t:x.c,b:x.b,u:x.u,s:x.s,r:x.r})))}));
+  for(const p of model.paras){const rs=p.runs;for(let k=1;k<rs.length-1;k++)if(rs[k].t===' '&&rs[k-1].r&&rs[k+1].r)rs[k].r=true;p.runs=mergeRuns(rs);}
+}
+/* files */
+async function saveFile(name,data){
+  try{const d=await claude.use('downloads'); if(d){await d.save({filename:name,data});return;}}catch(e){if(e&&e.code==='declined')return;}
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data]));a.download=name;a.click();
+}
+const docName=()=>(model.running[0]||'bill').replace(/[^\w.-]+/g,'_');
+$('bPdf').onclick=async()=>{if(!hasDoc)return;domToModel();saveFile(docName()+'.pdf',await buildPDF(model));};
+$('bSaveJson').onclick=()=>{domToModel();saveFile(docName()+'-draft.json',JSON.stringify({model,original},null,1));};
+$('bOpen').onclick=()=>$('fileIn').click();
+$('fileIn').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const o=JSON.parse(rd.result);if(!o.model||!o.model.paras)throw 0;model=o.model;original=o.original||clone(model);renderSetup();modelToDom();renderPreview();}catch(err){$('stat').textContent='That file is not a saved draft.';}};rd.readAsText(f);e.target.value='';};
+window.addEventListener('resize',()=>{clearTimeout(tm);tm=setTimeout(renderPreview,150);});
+document.body.classList.add('nodoc'); renderSetup(); renderPreview();
+$('cChg').addEventListener('change',e=>{chgOn=e.target.checked;renderPreview();});
+const APP_VERSION='dev';   /* tools/make_index.py replaces this with the commit and date in the hosted copy; 'dev' shows no version */
+$('foot').textContent='NERedliner'+(APP_VERSION!=='dev'?' · version '+APP_VERSION:'')+' · Your PDFs and edits stay in this browser; nothing is uploaded.';
+window.__bill={layout,buildPDF,adopt,openPDF,newDoc,changeList,get model(){return model;},set model(m){model=m;},get original(){return original;}};
+</script>
+<script>
+
+/* NERedliner export naming and deferred creation controls */
+// Set true to restore the retained New bill / New amendment interface.
+const NR_ENABLE_NEW_DOCUMENTS = false;
+function nrRedlineFilename(info, date = new Date()) {
+  const bill = String(info || 'bill').replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/\s+/g, ' ').trim().replace(/[. ]+$/, '') || 'bill';
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  const yy = String(date.getFullYear()).slice(-2);
+  return `${bill} Redline ${mm}${dd}${yy}.pdf`;
+}
+const nrOriginalSaveFile = saveFile;
+saveFile = async function(name, data) {
+  if (/\.pdf$/i.test(name)) {
+    const info = model && model.running && model.running[0];
+    name = nrRedlineFilename(info);
+  }
+  return nrOriginalSaveFile(name, data);
+};
+function nrHideDeferredCreation() {
+  if (NR_ENABLE_NEW_DOCUMENTS) return;
+  const selector = document.getElementById('newSel');
+  if (selector) selector.hidden = true;
+  document.querySelectorAll('button, a').forEach(control => {
+    const text = control.textContent.trim();
+    if (/^new\s+(bill|amendment)\b/i.test(text)) control.hidden = true;
+  });
+}
+nrHideDeferredCreation();
+// The welcome panel is rebuilt dynamically; retain this behavior on reset.
+const nrCreationObserver = new MutationObserver(nrHideDeferredCreation);
+if (!NR_ENABLE_NEW_DOCUMENTS) nrCreationObserver.observe(document.body, { childList: true, subtree: true });
+
+</script>

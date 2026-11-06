@@ -1,0 +1,187 @@
+del.push(h.next);h.next++;}
+  }
+  const at=(a,b)=>{const p=pageLine(o,a),q=pageLine(o,b);
+    if(p.page===q.page) return p.line===q.line?`Page ${p.page}, Line ${p.line}`:`Page ${p.page}, Lines ${p.line}-${q.line}`;
+    return `Page ${p.page}, Line ${p.line} through Page ${q.page}, Line ${q.line}`;};
+  const q=s=>'"'+s+'"', qe=s=>'"'+(/[.,;:]$/.test(s)?s:s+'.')+'"';               /* closing period goes inside the quote, unless the text already ends in punctuation */
+  return hunks.map(h=>{
+    const dw=h.del.map(k=>A[k]), insT=joinW(h.ins.map(k=>B[k])); let text,pos;
+    if(dw.length){
+      const both=h.ins.length>0, f=both?q:qe;
+      const what=dw.length>14?`beginning with ${q(joinW(dw.slice(0,3)))} through ${f(joinW(dw.slice(-3)))}`:f(joinW(dw));
+      pos=at(dw[0].line,dw[dw.length-1].end); text=`${pos}, strike ${what}`+(both?` and insert ${qe(insT)}`:'');
+    }else if(h.prev>=0){
+      const p=A[h.prev], lead=/^[,;:.]+$/.test(p.t)&&h.prev>0?[A[h.prev-1],p]:[p];     /* anchor on "state," rather than a bare comma */
+      pos=at(p.end,p.end); text=`${pos}, after ${q(joinW(lead))} insert ${qe(insT)}`;
+    }else{const n=A[h.next]; pos=at(n.line,n.line); text=`${pos}, before ${q(n.t)} insert ${qe(insT)}`;}
+    const pl=pageLine(o,dw.length?dw[0].line:(h.prev>=0?A[h.prev].end:A[h.next].line));
+    return {text:text.replace(/ /g,' '),page:pl.page,line:pl.line};     /* statute numbers use a non-breaking space before "(1)"; the notation reads with a plain one */
+  });
+}
+function chgList(m,o){o=o||original; if(!chgOn||!o||o===m||m.tracked===false||!hasDoc) return []; return changeList(m,o);}
+function wrapPlain(s,n,ind){
+  const out=[]; let line='', first=true;
+  const push=t=>{out.push((first?'':ind)+t);first=false;}, lim=()=>first?n:n-ind.length;
+  for(let w of s.split(' ')){
+    while(w.length>lim()){ if(line){push(line);line='';} push(w.slice(0,lim())); w=w.slice(lim()); }
+    if(!line) line=w; else if((line+' '+w).length<=lim()) line+=' '+w; else{push(line);line=w;}
+  }
+  if(line) push(line);
+  return out;
+}
+/* the change page(s) appended after the bill: one page unless there are too many notations to fit */
+function changePageItems(m,list){
+  if(!list.length) return [];
+  const X=63, CC=80, PITCH2=13, GAP=5, BOTTOM=742, sheets=[]; let its=null, top=0, onSheet=0;
+  const nota=[m.author&&('Redlined by '+m.author),m.note].filter(Boolean).join(' · ');
+  const begin=cont=>{
+    its=[]; sheets.push(its);
+    m.running.forEach((t,i)=>{const tp=22.7+12*i; its.push({x:63,top:tp,size:10,t}); its.push({x:XR-t.length*GLYPH,top:tp,size:10,t});});
+    const title='CHANGES TO THE ORIGINAL'+(cont?' (continued)':'');
+    its.push({x:306-title.length*0.6*12/2,top:84,size:12,bold:true,t:title});
+    if(!cont){const sub='Page and line numbers refer to the original version.'; its.push({x:306-sub.length*3,top:104,size:10,t:sub});}
+    its.push({x:63,top:757.1,size:10,t:'NERedliner',red:true});
+    if(nota) its.push({x:63,top:771,size:8,t:nota,red:true});
+    top=cont?116:132; onSheet=0;
+  };
+  begin(false);
+  for(const c of list){
+    const lines=wrapPlain(c.text,CC,'    '), h=lines.length*PITCH2+GAP;
+    if(top+h>BOTTOM&&onSheet>0) begin(true);
+    lines.forEach((t,k)=>its.push({x:X,top:top+k*PITCH2,size:10,t}));
+    top+=h; onSheet++;
+  }
+  return sheets;
+}
+
+/* ---------- PDF reader (for PDFs from the legislature's drafting system) ---------- */
+const PDFR=(()=>{
+const WSP=new Set([0,9,10,12,13,32]), DELIM='()<>[]{}/%';
+const NUM=/[+-]?(?:\d+\.?\d*|\.\d+)/y, REF=/\s+(\d+)\s+R(?![A-Za-z])/y, OBJ=/(\d+)\s+(\d+)\s+obj/y;
+const latin=u8=>{let s='';for(let i=0;i<u8.length;i+=8192)s+=String.fromCharCode.apply(null,u8.subarray(i,i+8192));return s;};
+function skip(s,i){for(;;){const c=s.charCodeAt(i);if(c===37){while(i<s.length){const d=s.charCodeAt(i);if(d===10||d===13)break;i++;}}else if(WSP.has(c))i++;else return i;}}
+function parse(s,i,refs){
+  i=skip(s,i); const ch=s[i];
+  if(i>=s.length) throw new Error('unexpected end');
+  if(ch==='/'){let j=i+1;while(j<s.length&&!WSP.has(s.charCodeAt(j))&&!DELIM.includes(s[j]))j++;
+    return [{name:s.slice(i+1,j).replace(/#([0-9a-fA-F]{2})/g,(_,h)=>String.fromCharCode(parseInt(h,16)))},j];}
+  if(ch==='<'&&s[i+1]==='<'){const d={};i+=2;for(;;){i=skip(s,i);if(s[i]==='>'&&s[i+1]==='>'){i+=2;break;}
+    const [k,j]=parse(s,i,refs);const [v,j2]=parse(s,j,refs);d[k.name]=v;i=j2;}return [d,i];}
+  if(ch==='<'){const j=s.indexOf('>',i);let h=s.slice(i+1,j).replace(/\s+/g,'');if(h.length%2)h+='0';
+    const b=new Uint8Array(h.length/2);for(let k=0;k<b.length;k++)b[k]=parseInt(h.substr(2*k,2),16);return [{str:b},j+1];}
+  if(ch==='('){const out=[];let depth=1;i++;
+    while(i<s.length&&depth>0){let c=s[i];
+      if(c==='\\'){const n=s[i+1];i+=2;
+        if(n==='n')out.push(10);else if(n==='r')out.push(13);else if(n==='t')out.push(9);else if(n==='b')out.push(8);else if(n==='f')out.push(12);
+        else if(/[0-7]/.test(n)){let o=n;while(o.length<3&&/[0-7]/.test(s[i])){o+=s[i];i++;}out.push(parseInt(o,8)&255);}
+        else if(n==='\r'){if(s[i]==='\n')i++;}else if(n==='\n'){}else out.push(n.charCodeAt(0));continue;}
+      if(c==='(')depth++;else if(c===')'){depth--;if(!depth){i++;break;}}
+      out.push(c.charCodeAt(0));i++;}
+    return [{str:Uint8Array.from(out)},i];}
+  if(ch==='['){const a=[];i++;for(;;){i=skip(s,i);if(s[i]===']'){i++;break;}const [v,j]=parse(s,i,refs);a.push(v);i=j;}return [a,i];}
+  NUM.lastIndex=i; const m=NUM.exec(s);
+  if(m){let j=i+m[0].length;const n=parseFloat(m[0]);
+    if(refs&&/^\d+$/.test(m[0])){REF.lastIndex=j;const r=REF.exec(s);if(r)return [{ref:parseInt(m[0]),gen:parseInt(r[1])},j+r[0].length];}
+    return [n,j];}
+  let j=i;while(j<s.length&&!WSP.has(s.charCodeAt(j))&&!DELIM.includes(s[j]))j++;
+  if(j===i)j=i+1;
+  const w=s.slice(i,j); return [w==='true'?true:w==='false'?false:w==='null'?null:{kw:w},j];
+}
+async function inflate(u8){
+  if(typeof DecompressionStream==='undefined') throw new Error('This browser cannot unpack PDF streams');
+  const st=new Blob([u8]).stream().pipeThrough(new DecompressionStream('deflate'));
+  return new Uint8Array(await new Response(st).arrayBuffer());
+}
+function unpredict(d,parms){
+  const pr=parms.Predictor||1; if(pr<10) return d;
+  const cols=parms.Columns||1, bpp=Math.max(1,Math.ceil((parms.Colors||1)*(parms.BitsPerComponent||8)/8)), rb=Math.ceil(cols*(parms.Colors||1)*(parms.BitsPerComponent||8)/8);
+  const rows=Math.floor(d.length/(rb+1)), out=new Uint8Array(rows*rb);
+  for(let r=0;r<rows;r++){const ft=d[r*(rb+1)];
+    for(let c=0;c<rb;c++){const x=d[r*(rb+1)+1+c], a=c>=bpp?out[r*rb+c-bpp]:0, b=r?out[(r-1)*rb+c]:0, cc=(r&&c>=bpp)?out[(r-1)*rb+c-bpp]:0;
+      let v=x; if(ft===1)v=x+a;else if(ft===2)v=x+b;else if(ft===3)v=x+((a+b)>>1);
+      else if(ft===4){const p=a+b-cc,pa=Math.abs(p-a),pb=Math.abs(p-b),pc=Math.abs(p-cc);v=x+(pa<=pb&&pa<=pc?a:pb<=pc?b:cc);}
+      out[r*rb+c]=v&255;}}
+  return out;
+}
+class Reader{
+  constructor(u8){this.u8=u8;this.s=latin(u8);this.x=new Map();this.cache=new Map();this.trailer=null;this.fonts=new Map();this.os=new Map();}
+  async init(){
+    const s=this.s,k=s.lastIndexOf('startxref'); if(k<0) throw new Error('This does not look like a PDF file');
+    let off=parseInt(s.slice(k+9).trim().split(/\s+/)[0]); const seen=new Set();
+    while(off!=null&&!isNaN(off)&&!seen.has(off)){seen.add(off);off=await this.readXref(off);}
+    if(!this.trailer||!this.trailer.Root) throw new Error('Could not find the PDF catalog');
+  }
+  async readXref(off){
+    const s=this.s; let i=skip(s,off);
+    if(s.startsWith('xref',i)){
+      i+=4;
+      for(;;){i=skip(s,i); if(s.startsWith('trailer',i)){i+=7;break;}
+        const [a,j]=parse(s,i);const [n,j2]=parse(s,j);i=j2;
+        for(let k=0;k<n;k++){i=skip(s,i);const o=parseInt(s.substr(i,10)),t=s[i+17];i+=18;
+          if(t==='n'&&!this.x.has(a+k))this.x.set(a+k,{t:1,o});}}
+      const [d]=parse(s,i,true); if(!this.trailer)this.trailer=d;
+      if(d.XRefStm!=null) await this.readXref(d.XRefStm);
+      return d.Prev;
+    }
+    const r=await this.readAt(off), d=r.dict, data=await this.decode(r);
+    if(!this.trailer)this.trailer=d;
+    const W=d.W, idx=d.Index||[0,d.Size]; let p=0;
+    const rd=n=>{let v=0;for(let k=0;k<n;k++)v=v*256+data[p++];return v;};
+    for(let q=0;q<idx.length;q+=2)for(let k=0;k<idx[q+1];k++){
+      const t=W[0]?rd(W[0]):1,a=rd(W[1]),b=rd(W[2]);
+      if(!this.x.has(idx[q]+k)){if(t===1)this.x.set(idx[q]+k,{t:1,o:a});else if(t===2)this.x.set(idx[q]+k,{t:2,stm:a,i:b});}}
+    return d.Prev;
+  }
+  async readAt(off){
+    const s=this.s; let i=skip(s,off); OBJ.lastIndex=i; const m=OBJ.exec(s); if(!m) throw new Error('bad object at '+off);
+    i+=m[0].length; let [val,j]=parse(s,i,true); j=skip(s,j);
+    if(val&&typeof val==='object'&&!Array.isArray(val)&&s.startsWith('stream',j)){
+      j+=6; if(s[j]==='\r'&&s[j+1]==='\n')j+=2;else if(s[j]==='\n'||s[j]==='\r')j++;
+      let len=await this.res(val.Length);
+      if(typeof len!=='number'||s.substr(j+len,20).search(/endstream/)<0){const e=s.indexOf('endstream',j);len=e-j;if(s[j+len-1]==='\n')len--;if(s[j+len-1]==='\r')len--;}
+      return {num:parseInt(m[1]),dict:val,data:this.u8.subarray(j,j+len),stream:true};
+    }
+    return {num:parseInt(m[1]),val};
+  }
+  async getObj(n){
+    if(this.cache.has(n)) return this.cache.get(n);
+    const e=this.x.get(n); let out=null;
+    if(e&&e.t===1){const r=await this.readAt(e.o);out=r.stream?r:r.val;}
+    else if(e&&e.t===2){let os=this.os.get(e.stm);
+      if(!os){const st=await this.getObj(e.stm);const data=await this.decode(st);const txt=latin(data);const N=st.dict.N,F=st.dict.First;
+        const hdr=[];let p=0;for(let k=0;k<N*2;k++){const [v,j]=parse(txt,p);hdr.push(v);p=j;}
+        os={txt,F,hdr};this.os.set(e.stm,os);}
+      const num=os.hdr[2*e.i],o=os.hdr[2*e.i+1];[out]=parse(os.txt,os.F+o,true);}
+    this.cache.set(n,out); return out;
+  }
+  async res(v){let d=0;while(v&&typeof v==='object'&&v.ref!==undefined&&d++<20)v=await this.getObj(v.ref);return v;}
+  async decode(st){
+    let f=await this.res(st.dict.Filter); if(f==null) return st.data; const fl=Array.isArray(f)?f:[f];
+    let pm=await this.res(st.dict.DecodeParms); const pms=Array.isArray(pm)?pm:[pm];
+    let d=st.data;
+    for(let k=0;k<fl.length;k++){const nm=(await this.res(fl[k])).name;
+      if(nm==='FlateDecode'||nm==='Fl'){d=await inflate(d);const p=await this.res(pms[k]);if(p&&typeof p==='object')d=unpredict(d,{Predictor:await this.res(p.Predictor),Columns:await this.res(p.Columns),Colors:await this.res(p.Colors),BitsPerComponent:await this.res(p.BitsPerComponent)});}
+      else throw new Error('Unsupported PDF stream filter: '+nm);}
+    return d;
+  }
+  async pages(){
+    const root=await this.res(this.trailer.Root), out=[];
+    const walk=async(node,inh)=>{node=await this.res(node);const i2={...inh};
+      for(const k of ['Resources','MediaBox'])if(node[k]!==undefined)i2[k]=node[k];
+      const kids=await this.res(node.Kids);
+      if(kids)for(const kid of kids)await walk(kid,i2);else out.push({node,inh:i2});};
+    await walk(root.Pages,{}); return out;
+  }
+  async loadFont(ref){
+    const key=ref&&ref.ref!==undefined?ref.ref:null; if(key!=null&&this.fonts.has(key))return this.fonts.get(key);
+    const f=await this.res(ref), sub=(await this.res(f.Subtype)).name;
+    let base=((await this.res(f.BaseFont))||{}).name||'';
+    const info={bold:false,cmap:new Map(),w:new Map(),dw:600,bytes:1};
+    if(sub==='Type0'){info.bytes=2;const d=await this.res((await this.res(f.DescendantFonts))[0]);
+      base+=' '+(((await this.res(d.BaseFont))||{}).name||'');
+      const dw=await this.res(d.DW); info.dw=typeof dw==='number'?dw:1000;
+      const W=await this.res(d.W)||[];
+      for(let i=0;i<W.length;){const a=await this.res(W[i]),b=await this.res(W[i+1]);
+        if(Array.isArray(b)){for(let k=0;k<b.length;k++)info.w.set(a+k,await this.res(b[k]));i+=2;}
+        else{const w=await this.res(W[i+2]);for(let c=a;c<=b&&c-a<70000;c++)info.w.set(c,w);i+=3;}}}
+    else{const fc=await thi

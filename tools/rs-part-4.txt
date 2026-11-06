@@ -1,0 +1,197 @@
+s.res(f.FirstChar),ws=await this.res(f.Widths);info.dw=600;
+      if(Array.isArray(ws))for(let k=0;k<ws.length;k++)info.w.set(fc+k,await this.res(ws[k]));}
+    info.bold=/bold/i.test(base);
+    const tu=await this.res(f.ToUnicode);
+    if(tu&&tu.stream){const txt=latin(await this.decode(tu));
+      const hexs=h=>{let o='';for(let k=0;k+3<h.length+1;k+=4)o+=String.fromCharCode(parseInt(h.substr(k,4),16));return o;};
+      for(const blk of txt.matchAll(/beginbfchar([\s\S]*?)endbfchar/g))
+        for(const m of blk[1].matchAll(/<([0-9a-fA-F]+)>\s*<([0-9a-fA-F]+)>/g))info.cmap.set(parseInt(m[1],16),hexs(m[2]));
+      for(const blk of txt.matchAll(/beginbfrange([\s\S]*?)endbfrange/g))
+        for(const m of blk[1].matchAll(/<([0-9a-fA-F]+)>\s*<([0-9a-fA-F]+)>\s*(<[0-9a-fA-F]+>|\[[^\]]*\])/g)){
+          const lo=parseInt(m[1],16),hi=parseInt(m[2],16);
+          if(m[3][0]==='<'){const base=hexs(m[3].slice(1,-1));
+            for(let c=lo;c<=hi;c++)info.cmap.set(c,base.slice(0,-1)+String.fromCharCode(base.charCodeAt(base.length-1)+c-lo));}
+          else{const arr=[...m[3].matchAll(/<([0-9a-fA-F]+)>/g)];for(let c=lo;c<=hi&&c-lo<arr.length;c++)info.cmap.set(c,hexs(arr[c-lo][1]));}}}
+    if(key!=null)this.fonts.set(key,info); return info;
+  }
+  async content(page){
+    const c=await this.res(page.node.Contents); const list=Array.isArray(c)?c:[c]; let out='';
+    for(const r of list){const st=await this.res(r);out+=latin(await this.decode(st))+'\n';}
+    return out;
+  }
+}
+const mul=(A,B)=>[A[0]*B[0]+A[1]*B[2],A[0]*B[1]+A[1]*B[3],A[2]*B[0]+A[3]*B[2],A[2]*B[1]+A[3]*B[3],A[4]*B[0]+A[5]*B[2]+B[4],A[4]*B[1]+A[5]*B[3]+B[5]];
+function cmyk(c,m,y,k){return [(1-c)*(1-k),(1-m)*(1-k),(1-y)*(1-k)];}
+async function readPage(rd,page){
+  const mb=(await Promise.all((await rd.res(page.inh.MediaBox)||[0,0,612,792]).map(v=>rd.res(v))));
+  const H=mb[3]-mb[1], W=mb[2]-mb[0];
+  const res=await rd.res(page.inh.Resources)||{}; const fdict=await rd.res(res.Font)||{}; const fonts={};
+  for(const k of Object.keys(fdict)) fonts[k]=await rd.loadFont(fdict[k]);
+  const s=await rd.content(page); const chars=[],lines=[];
+  let ctm=[1,0,0,1,-mb[0],-mb[1]], stack=[], tm=[1,0,0,1,0,0], tlm=tm, font=null, size=1, tc=0, tw=0, th=1, tl=0, rise=0;
+  let fill=[0,0,0], stroke=[0,0,0], path=[], rects=[], clip=false, cur=null, lw=1;
+  const toDev=(x,y)=>[ctm[0]*x+ctm[2]*y+ctm[4],ctm[1]*x+ctm[3]*y+ctm[5]];
+  const show=bytes=>{
+    if(!font)return; const step=font.bytes;
+    for(let i=0;i+step<=bytes.length;i+=step){
+      const code=step===2?(bytes[i]<<8|bytes[i+1]):bytes[i];
+      const w0=(font.w.has(code)?font.w.get(code):font.dw)/1000;
+      const T=mul(tm,ctm), vs=Math.hypot(T[2],T[3])*size, hs=Math.hypot(T[0],T[1])*th;
+      const txt=font.cmap.has(code)?font.cmap.get(code):(step===1?String.fromCharCode(code):'?');
+      const y=T[5]+rise*Math.hypot(T[2],T[3]);
+      chars.push({text:txt,x0:T[4],x1:T[4]+w0*size*hs,top:(H-y)-0.7*vs,size:vs,bold:font.bold,color:fill.slice()});
+      const tx=(w0*size+tc+(step===1&&code===32?tw:0))*th; tm=mul([1,0,0,1,tx,0],tm);
+    }
+  };
+  let i=0; const ops=[]; let args=[];
+  while(true){
+    i=skip(s,i); if(i>=s.length)break;
+    if(s.startsWith('BI',i)&&/\s/.test(s[i+2]||' ')){const e=s.indexOf('EI',i+2);i=e<0?s.length:e+2;args=[];continue;}
+    const [v,j]=parse(s,i,false); i=j;
+    if(!(v&&typeof v==='object'&&v.kw!==undefined)){args.push(v);continue;}
+    const op=v.kw, a=args; args=[];
+    switch(op){
+      case 'q':stack.push({ctm,fill,stroke,font,size,tc,tw,th,tl,rise,lw});break;
+      case 'Q':{const t=stack.pop();if(t)({ctm,fill,stroke,font,size,tc,tw,th,tl,rise,lw}=t);break;}
+      case 'cm':ctm=mul(a.slice(0,6),ctm);break;
+      case 'w':lw=a[0];break;
+      case 'BT':tm=[1,0,0,1,0,0];tlm=tm;break;
+      case 'Tf':font=fonts[a[0].name]||null;size=a[1];break;
+      case 'Tc':tc=a[0];break;case 'Tw':tw=a[0];break;case 'Tz':th=a[0]/100;break;case 'TL':tl=a[0];break;case 'Ts':rise=a[0];break;
+      case 'Tm':tm=a.slice(0,6);tlm=tm;break;
+      case 'Td':tlm=mul([1,0,0,1,a[0],a[1]],tlm);tm=tlm;break;
+      case 'TD':tl=-a[1];tlm=mul([1,0,0,1,a[0],a[1]],tlm);tm=tlm;break;
+      case 'T*':tlm=mul([1,0,0,1,0,-tl],tlm);tm=tlm;break;
+      case 'Tj':show(a[0].str);break;
+      case "'":tlm=mul([1,0,0,1,0,-tl],tlm);tm=tlm;show(a[0].str);break;
+      case '"':tw=a[0];tc=a[1];tlm=mul([1,0,0,1,0,-tl],tlm);tm=tlm;show(a[2].str);break;
+      case 'TJ':for(const e of a[0]){if(typeof e==='number')tm=mul([1,0,0,1,-e/1000*size*th,0],tm);else if(e&&e.str)show(e.str);}break;
+      case 'rg':fill=a.slice(0,3);break;case 'g':fill=[a[0],a[0],a[0]];break;case 'k':fill=cmyk(...a);break;
+      case 'RG':stroke=a.slice(0,3);break;case 'G':stroke=[a[0],a[0],a[0]];break;
+      case 'm':path=[[[a[0],a[1]]]];cur=path[0];break;
+      case 'l':if(!cur){cur=[[a[0],a[1]]];path=[cur];}else cur.push([a[0],a[1]]);break;
+      case 're':rects.push(a.slice(0,4));break;
+      case 'W':case 'W*':clip=true;break;
+      case 'S':case 's':case 'B':case 'b':
+        if(!clip)for(const sp of path)for(let k=0;k+1<sp.length;k++){const p=toDev(...sp[k]),q=toDev(...sp[k+1]);
+          if(Math.abs(p[1]-q[1])<0.3)lines.push({x0:Math.min(p[0],q[0]),x1:Math.max(p[0],q[0]),top:H-(p[1]+q[1])/2,color:stroke.slice()});}
+        path=[];cur=null;clip=false;rects=[];break;
+      case 'f':case 'F':case 'f*':
+        if(!clip)for(const r of rects){const p=toDev(r[0],r[1]),q=toDev(r[0]+r[2],r[1]+r[3]);
+          if(Math.abs(p[1]-q[1])<1.5)lines.push({x0:Math.min(p[0],q[0]),x1:Math.max(p[0],q[0]),top:H-(p[1]+q[1])/2,color:fill.slice()});}
+        path=[];cur=null;clip=false;rects=[];break;
+      case 'n':path=[];cur=null;clip=false;rects=[];break;
+    }
+  }
+  return {width:W,height:H,chars,lines};
+}
+async function readAll(u8){
+  const rd=new Reader(u8); await rd.init(); const pages=await rd.pages(), out=[];
+  for(const p of pages) out.push(await readPage(rd,p));
+  return out;
+}
+return {readAll};
+})();
+
+/* ---------- turn the reader's characters and rules into the editor model ---------- */
+const PRESET={
+  bill:{firstTop:254.1,firstN:23,bodyTop:60.1,perPage:31,enactBreak:true},
+  amendment:{firstTop:152.1,firstN:27,bodyTop:78.1,perPage:31,enactBreak:false},
+  other:{firstTop:152.1,firstN:27,bodyTop:78.1,perPage:31,enactBreak:false}
+};
+function extractModel(pages){
+  const UL=8.3, ST=4.6, TOL=1.4, r1=v=>Math.round(v*10)/10;
+  const paras=[], running=[], front=[], footer=[];
+  const perPage=[], firstTops=[]; let prevFull=false;
+  pages.forEach((pg,pi)=>{
+    const hl=pg.lines; const chars=pg.chars.slice().sort((a,b)=>a.top-b.top||a.x0-b.x0);
+    const rows=[]; for(const c of chars){const r=rows[rows.length-1]; if(r&&Math.abs(c.top-r.top)<1.0){r.cs.push(c);}else rows.push({top:c.top,cs:[c]});}
+    let count=0, firstTop=null;
+    for(const row of rows){
+      const cs=row.cs.sort((a,b)=>a.x0-b.x0), top=Math.round(row.top);
+      if(top>750){ if(pi===0){const t=cs.map(c=>c.text).join('').trim(); if(t)footer.push(t);} continue; }
+      if(top<55){ if(pi===0){const t=cs.filter(c=>c.x0<300).map(c=>c.text).join('').trim(); if(t)running.push(t);} continue; }
+      const numcs=cs.filter(c=>c.x1<=90);
+      if(!numcs.length||!/^\d+$/.test(numcs.map(c=>c.text).join(''))){
+        if(pi===0){
+          let t='',px=null; for(const c of cs){if(px!==null&&c.x0-px>2&&c.text!==' '&&!t.endsWith(' '))t+=' ';t+=c.text;px=c.x1;}
+          t=t.trim(); if(!t)continue;
+          const x0=cs[0].x0,x1=cs[cs.length-1].x1;
+          const f={t,top:r1(cs[0].top),size:Math.round(cs[0].size),bold:cs[0].bold};
+          if(Math.abs((x0+x1)/2-305)<8&&x0>120)f.cx=r1((x0+x1)/2);else f.x=r1(x0);
+          front.push(f);
+        }
+        continue;
+      }
+      const body=cs.filter(c=>c.x0>=90); count++;
+      if(firstTop===null)firstTop=r1(cs[0].top);
+      const bx=body.length?body[0].x0:99, full=body.length?Math.max(...body.map(c=>c.x1))>=537.6:false;
+      const runs=[];
+      for(const c of body){
+        const mid=(c.x0+c.x1)/2;
+        const hit=off=>hl.some(l=>Math.abs(l.top-(c.top+off))<TOL&&l.x0-1<=mid&&mid<=l.x1+1);
+        const col=c.color, red=!!col&&col.length===3&&col[0]>.6&&col[1]<.3;
+        const k=[c.bold,hit(UL),hit(ST),red], last=runs[runs.length-1];
+        if(last&&last.b===k[0]&&last.u===k[1]&&last.s===k[2]&&last.r===k[3])last.t+=c.text;
+        else runs.push({t:c.text,b:k[0],u:k[1],s:k[2],r:k[3]});
+      }
+      if(!runs.length){prevFull=false;continue;}
+      if(prevFull&&paras.length&&!(bx>110&&paras[paras.length-1].style==='indent')){
+        const p=paras[paras.length-1]; if(bx>110)p.style='hang';
+        const prev=p.runs, glue=prev[prev.length-1].t.endsWith('-')?'':' ';
+        runs[0].t=glue+runs[0].t; for(const r of runs)prev.push(r);
+      }else paras.push({style:bx>110?'indent':'flush',runs});
+      prevFull=full;
+    }
+    perPage.push(count); firstTops.push(firstTop);
+  });
+  for(const p of paras){
+    const out=[]; for(const r of p.runs){
+      const pc=out.length?out[out.length-1].t.slice(-1):'';                      /* a double space right after a period is real ("Sec. 33.  Sections ..."), keep it; collapse any other run of spaces */
+      r.t=r.t.replace(/ {2,}/g,(m,o,s)=>m.length===2&&(o>0?s[o-1]:pc)==='.'?'  ':' ');const l=out[out.length-1];
+      if(l&&l.b===r.b&&l.u===r.u&&l.s===r.s&&l.r===r.r)l.t+=r.t;else out.push(r);}
+    out.forEach((r,i)=>{if(r.t===' '&&i>0&&i<out.length-1)for(const k of 'usr')if(out[i-1][k]&&out[i+1][k])r[k]=true;});
+    const merged=[]; for(const r of out){const l=merged[merged.length-1];
+      if(l&&l.b===r.b&&l.u===r.u&&l.s===r.s&&l.r===r.r)l.t+=r.t;else merged.push(r);}
+    p.runs=merged;
+  }
+  if(!paras.length) throw new Error('No numbered text lines were found. This tool reads bills and amendments from the legislature’s drafting system.');
+  /* document type */
+  const ftxt=front.map(f=>f.t).join(' '), firstText=paras[0].runs.map(r=>r.t).join('');
+  let docType='other';
+  if(/LEGISLATIVE BILL/i.test(ftxt)||/^A BILL FOR AN ACT/i.test(firstText))docType='bill';
+  else if(/AMENDMENT/i.test(ftxt)||/^AM\d+/i.test(running[0]||''))docType='amendment';
+  const pre=PRESET[docType], n=pages.length, mid=perPage.slice(1,-1).filter(Boolean);
+  const top1=firstTops[0]??pre.firstTop;
+  const layout={
+    firstTop:top1,
+    firstN:docType==='bill'?pageOneCap(top1):(n>1?perPage[0]:pre.firstN),   /* a bill's page 1 is as long as the content makes it (see layout), so what the file happened to hold is not a limit */
+    bodyTop:n>1&&firstTops[1]?firstTops[1]:pre.bodyTop,
+    perPage:mid.length?Math.max(...mid):pre.perPage,
+    enactBreak:docType==='bill'};
+  let author='',note='';
+  for(const t of footer){const m=t.match(/^Redlined by (.*?)(?: · (.*))?$/); if(m){author=m[1];note=m[2]||'';}}
+  return {docType,layout,running,front,paras,author,note};
+}
+async function modelFromPDF(u8){return extractModel(await PDFR.readAll(u8));}
+
+/* ---------- editor <-> model ---------- */
+const $=id=>document.getElementById(id);
+const ed=$('editor'), prev=$('preview');
+let model={docType:'other',layout:{...PRESET.other},running:[],front:[],paras:[],author:'',note:''}, original=null, hasDoc=false;
+function isRedColor(c){
+  if(!c) return false; c=c.trim().toLowerCase(); if(c==='red') return true;
+  let m=c.match(/^#([0-9a-f]{6})$/), r,g,b;
+  if(m){r=parseInt(m[1].slice(0,2),16);g=parseInt(m[1].slice(2,4),16);b=parseInt(m[1].slice(4,6),16);}
+  else{m=c.match(/rgba?\(\s*(\d+)[ ,]+(\d+)[ ,]+(\d+)/); if(!m) return false; r=+m[1];g=+m[2];b=+m[3];}
+  return r>140&&g<90&&b<90;
+}
+function walk(n,st,runs){
+  if(n.nodeType===3){ const t=n.nodeValue.replace(/[\r\n\t]+/g,' '); if(t) runs.push({t,b:st.b,u:st.u,s:st.s,r:st.r}); return; }
+  if(n.nodeType!==1||n.tagName==='BR') return;
+  const s={...st}, tag=n.tagName;
+  if(tag==='B'||tag==='STRONG') s.b=true;
+  if(tag==='U') s.u=true;
+  if(tag==='S'||tag==='STRIKE'||tag==='DEL') s.s=true;
+  const fw=n.style&&n.style.fontWeight; if(fw==='bold'||+fw>=600) s.b=true;
+  const td=n.style&&(n.style.textDec
