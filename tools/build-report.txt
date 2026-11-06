@@ -2,19 +2,22 @@ apply: success
 index: success
 test:  success
 
-{"newSelHidden":true,"toolbarButton":true,"welcomeButton":true,"chip":"Draft bill (not an LB)","previewPages":2,"previewWatermarks":2,"pdfHeader":"%PDF-","pdfRotated":true,"pdfGray":true,"plainRotated":false,"plainWatermarks":0,"draftName":"Draft Bill 110626.pdf","redlineName":"LB650 Redline 110226.pdf"}
+{"newSelHidden":true,"toolbarButton":true,"welcomeButton":true,"buttonLabel":"New working draft","chip":"Working draft (not an LB)","previewPages":2,"previewWatermarks":2,"watermarkTop":40.576,"watermarkRotated":false,"runningHeader":"WORKING DRAFT","coverTitle":"WORKING DRAFT","pdfHeader":"%PDF-","pdfGray":true,"pdfDiagonal":false,"plainGray":false,"plainWatermarks":0,"draftName":"Working Draft 110626.pdf","redlineName":"LB650 Redline 110226.pdf"}
 PASS New bill/New amendment selector still hidden
 PASS Toolbar button present
 PASS Start-screen button present
+PASS Button says New working draft New working draft
 PASS Preview has pages 2
-PASS Watermark in preview 2
-PASS Chip says draft bill Draft bill (not an LB)
+PASS Watermark on every preview page 2 of 2
+PASS Watermark is a small unrotated line near the top top=40.576
+PASS Chip says working draft Working draft (not an LB)
+PASS Header and cover say WORKING DRAFT WORKING DRAFT / WORKING DRAFT
 PASS PDF header %PDF-
-PASS PDF watermark rotated
 PASS PDF watermark gray
+PASS PDF watermark not diagonal
 PASS Non-draft PDF has no watermark
 PASS Non-draft preview has no watermark
-PASS Draft file name Draft Bill 110626.pdf
+PASS Working draft file name Working Draft 110626.pdf
 PASS Redline file name unchanged LB650 Redline 110226.pdf
 PASS No page errors
 ALL CHECKS PASSED
