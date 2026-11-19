@@ -1,0 +1,72 @@
+name: Build and test unofficial redline markings
+on:
+  push:
+    branches: [unofficial-redline]
+    paths: [tools/unofficial-extension.js, tools/unofficial_test.cjs, .github/workflows/build-unofficial-redline.yml]
+permissions:
+  contents: write
+concurrency:
+  group: unofficial-redline-build
+  cancel-in-progress: false
+jobs:
+  build:
+    if: github.ref == 'refs/heads/unofficial-redline'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: unofficial-redline
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply markings only and update project instructions
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('app.html')
+          text=p.read_text(encoding='utf-8')
+          start='<!-- BEGIN UNOFFICIAL REDLINE EXTENSION -->'
+          end='<!-- END UNOFFICIAL REDLINE EXTENSION -->'
+          if start in text:
+              a=text.index(start)
+              b=text.index(end,a)+len(end)
+              text=text[:a]+text[b:]
+          old="${red?'0.75 0 0':'0 0 0'} rg"
+          new="${it.gray!=null ? [it.gray,it.gray,it.gray].join(' ') : (red?'0.75 0 0':'0 0 0')} rg"
+          if old in text:
+              assert text.count(old)==1
+              text=text.replace(old,new)
+          else:
+              assert new in text
+          ext=Path('tools/unofficial-extension.js').read_text(encoding='utf-8')
+          p.write_text(text.rstrip()+'\n'+start+'\n<script>\n'+ext+'\n</script>\n'+end+'\n',encoding='utf-8')
+          p=Path('CLAUDE.md')
+          notes=p.read_text(encoding='utf-8')
+          notes=notes.replace('He decided against adding "not an official Legislature product" wording, so do not add a disclaimer.','The no-disclaimer decision was superseded on 11/19/2026: unofficial-document markings are now required.')
+          if '## Unofficial redline markings (11/19/2026)' not in notes:
+              notes+='\n## Unofficial redline markings (11/19/2026)\nApproved scope: unofficial-document disclaimer above source/date on every page, including change pages; Redline after LB and AM identifiers in running headers and first-page titles; an on-screen notice. Preserve source dates, label first-reading dates and year-only information, and explicitly identify missing dates. Do not substitute save dates. Do not change existing drag-and-drop, PDF opening, metadata, filenames, numbered text or other styling. The personal working-draft feature is separate. Presentation extension: tools/unofficial-extension.js, appended to app.html. Browser tests: tools/unofficial_test.cjs.\n'
+          p.write_text(notes,encoding='utf-8')
+      - name: Rebuild hosted page
+        run: python3 tools/make_index.py
+      - name: Install browser tests outside repository
+        run: npm install --prefix /tmp/nr-browser puppeteer
+      - name: Run browser and PDF round-trip tests
+        run: |
+          set -o pipefail
+          NODE_PATH=/tmp/nr-browser/node_modules node tools/unofficial_test.cjs 2>&1 | tee tools/unofficial-build-report.txt
+      - name: Commit result only on review branch
+        if: always()
+        env:
+          BUILD_STATUS: ${{ job.status }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          touch tools/unofficial-build-report.txt
+          echo "Build result: $BUILD_STATUS" >> tools/unofficial-build-report.txt
+          git add tools/unofficial-build-report.txt
+          if [ "$BUILD_STATUS" = success ]; then
+            git add app.html index.html CLAUDE.md
+          fi
+          git diff --cached --quiet && exit 0
+          git commit -m "Unofficial markings build and tests: $BUILD_STATUS"
+          git push origin HEAD:unofficial-redline
