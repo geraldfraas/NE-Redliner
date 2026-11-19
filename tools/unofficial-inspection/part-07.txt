@@ -1,0 +1,126 @@
+$('bBold').onclick=()=>{document.execCommand('bold');schedule();};
+$('bUl').onclick=()=>{document.execCommand('underline');schedule();};
+const strike=()=>{document.execCommand('strikeThrough');schedule();};
+$('bStr').onclick=strike;
+ed.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.shiftKey&&e.key.toLowerCase()==='x'){e.preventDefault();strike();}});
+$('bRed').onclick=()=>{
+  ed.focus(); const cur=document.queryCommandValue('foreColor');
+  document.execCommand('styleWithCSS',false,false);
+  document.execCommand('foreColor',false,isRedColor(cur)?'#000001':RED); schedule();
+};
+function curBlock(){const s=getSelection(); let n=s.anchorNode; while(n&&n.parentNode!==ed) n=n.parentNode; return n&&n.nodeType===1?n:null;}
+$('pstyle').addEventListener('change',e=>{const b=curBlock(); if(b){b.dataset.pstyle=e.target.value;schedule();} ed.focus();});
+document.addEventListener('selectionchange',()=>{const b=curBlock(); if(b) $('pstyle').value=b.dataset.pstyle||'indent';});
+$('bClear').onclick=()=>{domToModel();for(const p of model.paras)for(const r of p.runs)r.r=false;modelToDom();renderPreview();};
+$('bMark').onclick=()=>{domToModel();markChanges();modelToDom();renderPreview();};
+const today=()=>new Date().toLocaleDateString('en-US');
+function lsGet(k){try{return localStorage.getItem(k)||'';}catch(e){return '';}}
+function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){}}
+function adopt(m,fromFileMeta){
+  m.docType=m.docType||'other';
+  if(fromFileMeta) m.tracked=true;            /* opened from a PDF: changes are listed against it */
+  m.author=lsGet('ne_author')||(fromFileMeta&&m.author)||'';
+  m.note=m.note&&fromFileMeta&&!lsGet('ne_author')?m.note:today();
+  hasDoc=true; document.body.classList.remove('nodoc'); model=m; original=clone(m); renderSetup(); modelToDom(); renderPreview();
+}
+$('bReset').onclick=()=>{const keep={author:model.author,note:model.note};model=clone(original);Object.assign(model,keep);renderSetup();modelToDom();renderPreview();};
+$('mAuthor').addEventListener('input',e=>{model.author=e.target.value;lsSet('ne_author',e.target.value.trim());renderPreview();});
+$('mNote').addEventListener('input',e=>{model.note=e.target.value;renderPreview();});
+function say(msg){$('stat').textContent=msg;}
+async function openPDF(file){
+  if(!file)return;
+  say('Reading '+file.name+'…');
+  try{
+    const m=await modelFromPDF(new Uint8Array(await file.arrayBuffer()));
+    adopt(m,true);
+    say(`Opened ${file.name}: ${TYPES[m.docType]}, ${layout(model).length} pages`);
+    setTimeout(renderPreview,2500);
+  }catch(err){say('Could not open that PDF. '+(err&&err.message?err.message:err));}
+}
+$('bPdfOpen').onclick=()=>$('pdfIn').click();
+$('pdfIn').onchange=e=>{openPDF(e.target.files[0]);e.target.value='';};
+['dragenter','dragover'].forEach(ev=>document.addEventListener(ev,e=>{if(e.dataTransfer&&[...e.dataTransfer.types].includes('Files')){e.preventDefault();document.body.classList.add('drop');}}));
+['dragleave','drop'].forEach(ev=>document.addEventListener(ev,e=>{document.body.classList.remove('drop');}));
+document.addEventListener('drop',e=>{const f=e.dataTransfer&&e.dataTransfer.files[0];if(f){e.preventDefault();/\.pdf$/i.test(f.name)?openPDF(f):say('Drop a PDF file.');}});
+$('newSel').addEventListener('change',e=>{const k=e.target.value;e.target.value='';if(k)adopt(newDoc(k));});
+function newDoc(kind){
+  const src=clone(TEMPLATES[kind==='bill'?'lb':'am']);
+  if(kind==='bill'){
+    src.running=['LB___','2025'];
+    src.front=src.front.map(f=>f.t.startsWith('LEGISLATIVE BILL')?{...f,t:'LEGISLATIVE BILL ___'}:f.t.startsWith('Introduced by')?{...f,t:'Introduced by ____, __.'}:f.t.startsWith('Read first')?{...f,t:'Read first time ____'}:f.t.startsWith('Committee')?{...f,t:'Committee: ____'}:f);
+    src.paras=[{style:'hang',runs:[{t:'A BILL FOR AN ACT relating to ____; to amend section ____, Reissue Revised Statutes of Nebraska; and to repeal the original section.',b:false,u:false,s:false,r:false}]},
+               {style:'flush',runs:[{t:'Be it enacted by the people of the State of Nebraska,',b:false,u:false,s:false,r:false}]},
+               {style:'indent',runs:[{t:'Section 1. ',b:true,u:false,s:false,r:false},{t:'Type or paste the bill text here.',b:false,u:false,s:false,r:false}]}];
+  }else{
+    src.running=['AM____','LB___','__ - '+today()];
+    src.front=src.front.map(f=>f.t.startsWith('AMENDMENTS TO')?{...f,t:'AMENDMENTS TO LB___'}:f);
+    src.paras=[{style:'indent',runs:[{t:'1. Strike the original sections and insert the following new sections:',b:false,u:false,s:false,r:false}]}];
+  }
+  src.docType=kind; src.author=''; src.note=''; src.tracked=false; return src;   /* a blank template has no original to list changes against */
+}
+function markChanges(){
+  const flat=m=>{const W=[];for(const p of m.paras){let cur=[];for(const r of p.runs)for(const c of r.t){if(c===' '){if(cur.length)W.push(cur);cur=[];}else cur.push({c,b:r.b,u:r.u,s:r.s,r:r.r});}if(cur.length)W.push(cur);}return W;};
+  const key=w=>w.map(x=>x.c).join('');
+  const A=flat(original).map(key);
+  const newParas=model.paras.map(p=>({style:p.style,cs:p.runs.flatMap(r=>[...r.t].map(c=>({c,b:r.b,u:r.u,s:r.s,r:r.r})))}));
+  const W=[];for(const p of newParas){let cur=[];for(const x of p.cs){if(x.c===' '){if(cur.length)W.push(cur);cur=[];}else cur.push(x);}if(cur.length)W.push(cur);}
+  const B=W.map(key), n=A.length, mm=B.length, w=mm+1, dp=new Uint16Array((n+1)*w);
+  for(let i=n-1;i>=0;i--)for(let j=mm-1;j>=0;j--)dp[i*w+j]=A[i]===B[j]?dp[(i+1)*w+j+1]+1:Math.max(dp[(i+1)*w+j],dp[i*w+j+1]);
+  const keep=new Array(mm).fill(false); let i=0,j=0;
+  while(i<n&&j<mm){ if(A[i]===B[j]){keep[j]=true;i++;j++;} else if(dp[(i+1)*w+j]>=dp[i*w+j+1])i++; else j++; }
+  W.forEach((wd,k)=>{if(!keep[k])wd.forEach(x=>x.r=true);});
+  model.paras=newParas.map(p=>({style:p.style,runs:mergeRuns(p.cs.map(x=>({t:x.c,b:x.b,u:x.u,s:x.s,r:x.r})))}));
+  for(const p of model.paras){const rs=p.runs;for(let k=1;k<rs.length-1;k++)if(rs[k].t===' '&&rs[k-1].r&&rs[k+1].r)rs[k].r=true;p.runs=mergeRuns(rs);}
+}
+/* files */
+async function saveFile(name,data){
+  try{const d=await claude.use('downloads'); if(d){await d.save({filename:name,data});return;}}catch(e){if(e&&e.code==='declined')return;}
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data]));a.download=name;a.click();
+}
+const docName=()=>(model.running[0]||'bill').replace(/[^\w.-]+/g,'_');
+$('bPdf').onclick=async()=>{if(!hasDoc)return;domToModel();saveFile(docName()+'.pdf',await buildPDF(model));};
+$('bSaveJson').onclick=()=>{domToModel();saveFile(docName()+'-draft.json',JSON.stringify({model,original},null,1));};
+$('bOpen').onclick=()=>$('fileIn').click();
+$('fileIn').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const o=JSON.parse(rd.result);if(!o.model||!o.model.paras)throw 0;model=o.model;original=o.original||clone(model);renderSetup();modelToDom();renderPreview();}catch(err){$('stat').textContent='That file is not a saved draft.';}};rd.readAsText(f);e.target.value='';};
+window.addEventListener('resize',()=>{clearTimeout(tm);tm=setTimeout(renderPreview,150);});
+document.body.classList.add('nodoc'); renderSetup(); renderPreview();
+$('cChg').addEventListener('change',e=>{chgOn=e.target.checked;renderPreview();});
+const APP_VERSION='dev';   /* tools/make_index.py replaces this with the commit and date in the hosted copy; 'dev' shows no version */
+$('foot').textContent='NERedliner'+(APP_VERSION!=='dev'?' · version '+APP_VERSION:'')+' · Your PDFs and edits stay in this browser; nothing is uploaded.';
+window.__bill={layout,buildPDF,adopt,openPDF,newDoc,changeList,get model(){return model;},set model(m){model=m;},get original(){return original;}};
+</script>
+<script>
+
+/* NERedliner export naming and deferred creation controls */
+// Set true to restore the retained New bill / New amendment interface.
+const NR_ENABLE_NEW_DOCUMENTS = false;
+function nrRedlineFilename(info, date = new Date()) {
+  const bill = String(info || 'bill').replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/\s+/g, ' ').trim().replace(/[. ]+$/, '') || 'bill';
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  const yy = String(date.getFullYear()).slice(-2);
+  return `${bill} Redline ${mm}${dd}${yy}.pdf`;
+}
+const nrOriginalSaveFile = saveFile;
+saveFile = async function(name, data) {
+  if (/\.pdf$/i.test(name)) {
+    const info = model && model.running && model.running[0];
+    name = nrRedlineFilename(info);
+  }
+  return nrOriginalSaveFile(name, data);
+};
+function nrHideDeferredCreation() {
+  if (NR_ENABLE_NEW_DOCUMENTS) return;
+  const selector = document.getElementById('newSel');
+  if (selector) selector.hidden = true;
+  document.querySelectorAll('button, a').forEach(control => {
+    const text = control.textContent.trim();
+    if (/^new\s+(bill|amendment)\b/i.test(text)) control.hidden = true;
+  });
+}
+nrHideDeferredCreation();
+// The welcome panel is rebuilt dynamically; retain this behavior on reset.
+const nrCreationObserver = new MutationObserver(nrHideDeferredCreation);
+if (!NR_ENABLE_NEW_DOCUMENTS) nrCreationObserver.observe(document.body, { childList: true, subtree: true });
+
+</script>

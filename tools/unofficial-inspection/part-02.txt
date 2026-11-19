@@ -1,0 +1,85 @@
+const TEMPLATES = {"am": {"layout": {"firstTop": 152.1, "firstN": 27, "bodyTop": 78.1, "perPage": 31}, "running": ["AM2839", "LB959", "DLM - 03/19/2026"], "front": [{"t": "AMENDMENTS TO LB959", "top": 78.1, "size": 10, "bold": false, "cx": 309.6}, {"t": "Introduced by", "top": 131.1, "size": 10, "bold": false, "x": 99.0}], "paras": []}, "lb": {"layout": {"firstTop": 254.1, "firstN": 23, "enactBreak": true, "bodyTop": 60.1, "perPage": 31}, "running": ["LB542", "2025"], "front": [{"t": "LEGISLATURE OF NEBRASKA", "top": 59.1, "size": 10, "bold": false, "cx": 300.6}, {"t": "ONE HUNDRED NINTH LEGISLATURE", "top": 79.1, "size": 10, "bold": false, "cx": 300.6}, {"t": "FIRST SESSION", "top": 99.1, "size": 10, "bold": false, "cx": 300.6}, {"t": "LEGISLATIVE BILL 542", "top": 123.2, "size": 18, "bold": true, "cx": 300.6}, {"t": "Introduced by Dover, 19.", "top": 189.1, "size": 10, "bold": false, "x": 99.0}, {"t": "Read first time January 22, 2025", "top": 210.1, "size": 10, "bold": false, "x": 99.0}, {"t": "Committee: Transportation and Telecommunications", "top": 232.1, "size": 10, "bold": false, "x": 99.0}], "paras": []}};
+const FONTS = {"reg": {"b64": "<BASE64 OMITTED FOR INSPECTION>", "map": {"32": 1, "33": 2, "34": 3, "35": 4, "36": 5, "37": 6, "38": 7, "39": 8, "40": 9, "41": 10, "42": 11, "43": 12, "44": 13, "45": 14, "46": 15, "47": 16, "48": 17, "49": 18, "50": 19, "51": 20, "52": 21, "53": 22, "54": 23, "55": 24, "56": 25, "57": 26, "58": 27, "59": 28, "60": 29, "61": 30, "62": 31, "63": 32, "64": 33, "65": 34, "66": 35, "67": 36, "68": 37, "69": 38, "70": 39, "71": 40, "72": 41, "73": 42, "74": 43, "75": 44, "76": 45, "77": 46, "78": 47, "79": 48, "80": 49, "81": 50, "82": 51, "83": 52, "84": 53, "85": 54, "86": 55, "87": 56, "88": 57, "89": 58, "90": 59, "91": 60, "92": 61, "93": 62, "94": 63, "95": 64, "96": 65, "97": 66, "98": 67, "99": 68, "100": 69, "101": 70, "102": 71, "103": 72, "104": 73, "105": 74, "106": 75, "107": 76, "108": 77, "109": 78, "110": 79, "111": 80, "112": 81, "113": 82, "114": 83, "115": 84, "116": 85, "117": 86, "118": 87, "119": 88, "120": 89, "121": 90, "122": 91, "123": 92, "124": 93, "125": 94, "126": 95, "160": 96, "161": 97, "162": 98, "163": 99, "164": 100, "165": 101, "166": 102, "167": 103, "168": 104, "169": 105, "170": 106, "171": 107, "172": 108, "173": 109, "174": 110, "175": 111, "176": 112, "177": 113, "178": 114, "179": 115, "180": 116, "181": 117, "182": 118, "183": 119, "184": 120, "185": 121, "186": 122, "187": 123, "188": 124, "189": 125, "190": 126, "191": 127, "192": 128, "193": 129, "194": 130, "195": 131, "196": 132, "197": 133, "198": 134, "199": 135, "200": 136, "201": 137, "202": 138, "203": 139, "204": 140, "205": 141, "206": 142, "207": 143, "208": 144, "209": 145, "210": 146, "211": 147, "212": 148, "213": 149, "214": 150, "215": 151, "216": 152, "217": 153, "218": 154, "219": 155, "220": 156, "221": 157, "222": 158, "223": 159, "224": 160, "225": 161, "226": 162, "227": 163, "228": 164, "229": 165, "230": 166, "231": 167, "232": 168, "233": 169, "234": 170, "235": 171, "236": 172, "237": 173, "238": 174, "239": 175, "240": 176, "241": 177, "242": 178, "243": 179, "244": 180, "245": 181, "246": 182, "247": 183, "248": 184, "249": 185, "250": 186, "251": 187, "252": 188, "253": 189, "254": 190, "255": 191, "8211": 196, "8212": 197, "8216": 198, "8217": 199, "8220": 200, "8221": 201, "8226": 202, "8230": 203, "8722": 205}, "upm": 2048, "bbox": [-52, -455, 1238, 1704]}, "bold": {"b64": "<BASE64 OMITTED FOR INSPECTION>", "map": {"32": 1, "33": 2, "34": 3, "35": 4, "36": 5, "37": 6, "38": 7, "39": 8, "40": 9, "41": 10, "42": 11, "43": 12, "44": 13, "45": 14, "46": 15, "47": 16, "48": 17, "49": 18, "50": 19, "51": 20, "52": 21, "53": 22, "54": 23, "55": 24, "56": 25, "57": 26, "58": 27, "59": 28, "60": 29, "61": 30, "62": 31, "63": 32, "64": 33, "65": 34, "66": 35, "67": 36, "68": 37, "69": 38, "70": 39, "71": 40, "72": 41, "73": 42, "74": 43, "75": 44, "76": 45, "77": 46, "78": 47, "79": 48, "80": 49, "81": 50, "82": 51, "83": 52, "84": 53, "85": 54, "86": 55, "87": 56, "88": 57, "89": 58, "90": 59, "91": 60, "92": 61, "93": 62, "94": 63, "95": 64, "96": 65, "97": 66, "98": 67, "99": 68, "100": 69, "101": 70, "102": 71, "103": 72, "104": 73, "105": 74, "106": 75, "107": 76, "108": 77, "109": 78, "110": 79, "111": 80, "112": 81, "113": 82, "114": 83, "115": 84, "116": 85, "117": 86, "118": 87, "119": 88, "120": 89, "121": 90, "122": 91, "123": 92, "124": 93, "125": 94, "126": 95, "160": 96, "161": 97, "162": 98, "163": 99, "164": 100, "165": 101, "166": 102, "167": 103, "168": 104, "169": 105, "170": 106, "171": 107, "172": 108, "173": 109, "174": 110, "175": 111, "176": 112, "177": 113, "178": 114, "179": 115, "180": 116, "181": 117, "182": 118, "183": 119, "184": 120, "185": 121, "186": 122, "187": 123, "188": 124, "189": 125, "190": 126, "191": 127, "192": 128, "193": 129, "194": 130, "195": 131, "196": 132, "197": 133, "198": 134, "199": 135, "200": 136, "201": 137, "202": 138, "203": 139, "204": 140, "205": 141, "206": 142, "207": 143, "208": 144, "209": 145, "210": 146, "211": 147, "212": 148, "213": 149, "214": 150, "215": 151, "216": 152, "217": 153, "218": 154, "219": 155, "220": 156, "221": 157, "222": 158, "223": 159, "224": 160, "225": 161, "226": 162, "227": 163, "228": 164, "229": 165, "230": 166, "231": 167, "232": 168, "233": 169, "234": 170, "235": 171, "236": 172, "237": 173, "238": 174, "239": 175, "240": 176, "241": 177, "242": 178, "243": 179, "244": 180, "245": 181, "246": 182, "247": 183, "248": 184, "249": 185, "250": 186, "251": 187, "252": 188, "253": 189, "254": 190, "255": 191, "8211": 196, "8212": 197, "8216": 198, "8217": 199, "8220": 200, "8221": 201, "8226": 202, "8230": 203, "8722": 205}, "upm": 2048, "bbox": [-10, -455, 1238, 1705]}};
+/* ---------- layout engine ---------- */
+const GLYPH=6, PITCH=22, COLS=73, ICOLS=68, XL=99, XI=127.8, XR=538.2;
+const RED='#c00000';
+const clone=o=>JSON.parse(JSON.stringify(o));
+const isAl=c=>/[A-Za-z0-9]/.test(c||'');
+const isDg=c=>/[0-9]/.test(c||'');
+const same=(a,b)=>!!a.b===!!b.b&&!!a.u===!!b.u&&!!a.s===!!b.s&&!!a.r===!!b.r;
+
+function tokenize(p){
+  const chars=[]; for(const r of p.runs) for(const c of r.t) chars.push({c,b:!!r.b,u:!!r.u,s:!!r.s,r:!!r.r});
+  const toks=[]; let cur=[],gap=[];
+  for(let i=0;i<chars.length;i++){
+    const ch=chars[i];
+    if(ch.c===' '){ if(cur.length){toks.push({gap,cells:cur});cur=[];gap=[];} gap.push(ch); continue;}
+    cur.push(ch);
+    const nx=chars[i+1]&&chars[i+1].c, pv=chars[i-1]&&chars[i-1].c;
+    if(ch.c==='-'&&isAl(pv)&&isAl(nx)&&!(isDg(pv)&&isDg(nx))){toks.push({gap,cells:cur});cur=[];gap=[];}
+  }
+  if(cur.length)toks.push({gap,cells:cur});
+  if(toks.length)toks[0].gap=[];
+  return toks;
+}
+function wrapPara(p){
+  const toks=tokenize(p), lines=[]; if(!toks.length) return lines;
+  const st=p.style||'indent';
+  const colsFor=n=>n===0?(st==='indent'?ICOLS:COLS):(st==='hang'?ICOLS:COLS);
+  const xFor=n=>n===0?(st==='indent'?XI:XL):(st==='hang'?XI:XL);
+  let cur=[],len=0;
+  const flush=last=>{const n=lines.length;lines.push({toks:cur,len,last,cols:colsFor(n),x:xFor(n)});cur=[];len=0;};
+  for(const t of toks){
+    const add=(cur.length?t.gap.length:0)+t.cells.length;
+    if(cur.length&&len+add>colsFor(lines.length)) flush(false);
+    len+=(cur.length?t.gap.length:0)+t.cells.length; cur.push(t);
+  }
+  flush(true);
+  return lines;
+}
+function buildSegs(L){
+  const toks=L.toks, segs=[]; let x=L.x;
+  const nG=toks.slice(1).filter(t=>t.gap.length).length;
+  const extra=(!L.last&&nG>0)?((XR-L.x)-L.len*GLYPH)/nG:0;     // fractional justification, like the drafting software
+  const push=(text,st,w)=>{segs.push({x,text,w,b:!!st.b,u:!!st.u,s:!!st.s,r:!!st.r});x+=w;};
+  toks.forEach((t,i)=>{
+    if(i>0&&t.gap.length){
+      const g=t.gap, all=k=>g.every(c=>c[k]);
+      push(' '.repeat(g.length),{b:all('b'),u:all('u'),s:all('s'),r:all('r')},g.length*GLYPH+extra);
+    }
+    let run=null;
+    for(const c of t.cells){
+      if(run&&same(run,c)) run.text+=c.c; else {if(run)push(run.text,run,run.text.length*GLYPH);run={text:c.c,b:c.b,u:c.u,s:c.s,r:c.r};}
+    }
+    if(run)push(run.text,run,run.text.length*GLYPH);
+  });
+  return segs;
+}
+/* A bill's page 1 is content-driven: it holds as many numbered lines as physically fit (the last line starts at 738.1pt, 23 lines
+   under the bill cover, 27 under an amendment header), and when the enacting clause lands on page 1 the page ends right after it,
+   so Section 1 starts page 2. A long summary that runs onto page 2 has no such break. */
+const ENACT=/^\s*Be it enacted by the people of the State of Nebraska/i;
+const pageOneCap=top=>Math.floor((738.1-top)/PITCH+0.01)+1;
+function layout(m){
+  const all=[]; for(const p of m.paras){
+    const Ls=wrapPara(p), en=ENACT.test(p.runs.map(r=>r.t).join(''));
+    Ls.forEach((L,j)=>all.push({segs:buildSegs(L),x:L.x,enact:en&&j===Ls.length-1}));
+  }
+  const LY=m.layout, pages=[]; let i=0;
+  do{
+    const first=!pages.length, n=first?LY.firstN:LY.perPage, top0=first?LY.firstTop:LY.bodyTop, lines=[];
+    for(let k=0;k<n&&i<all.length;k++,i++){
+      lines.push({num:k+1,top:top0+k*PITCH,x:all[i].x,segs:all[i].segs});
+      if(first&&LY.enactBreak&&all[i].enact){i++;break;}
+    }
+    pages.push({n:pages.length+1,lines});
+  }while(i<all.length);
+  return pages;
+}
+/* every text item on a page, in PDF coordinates: {x,top,size,text|runs} */
+function pageItems(m,pg){
+  const it=[];
+  m.running.forEach((t,i)=>{const top=22.7+12*i; it.push({x:63,top,size:10,t}); it.push({x:XR-t.length*GLYPH,top,size:10,t});});
+  if(pg.n===1) for(const f of m.front){const w=f.t.length*0.6*f.size; it.push({x:f.cx!=null?f.cx-w/2:f.x,top:f.top,size:f.size,bold:f.bold,t:f.t});}
+  for(const L of pg.lines){const ns=String(L.num); it.push({x:81-ns.length*GLYPH,top:L.top,size:10,t:ns,ln:true}); it.push({x:L.x,top:L.top,size:10,segs:L.segs});}
+  const ft='-'+pg.n+'-'; it.push({x:306-ft.length*3,top:757.1,size:10,t:ft});
