@@ -28,7 +28,7 @@ Owner: Gerald Fraas, Nebraska State Legislature. Browser tool to open a bill or 
 - Evidence is thin: the break is what Gerald described plus the old 6-line bill template. LB650 never exercises it (its summary runs onto page 2), so it has not been checked against a real short-summary bill.
 
 ## Hosting (branch `hosting-build`)
-- Gerald's plan (11/1/2026): a public web page on a server he contracts, used by people inside and outside the office. He uploads the file himself; this sandbox cannot reach his server. He decided against adding "not an official Legislature product" wording, so do not add a disclaimer.
+- Gerald's plan (11/1/2026): a public web page on a server he contracts, used by people inside and outside the office. He uploads the file himself; this sandbox cannot reach his server. The no-disclaimer decision was superseded on 11/19/2026: unofficial-document markings are now required.
 - Upload `index.html`, not `app.html`. `app.html` is written for the claude.ai viewer, which wraps every page in a doctype, UTF-8 and viewport shell. Served raw it runs in quirks mode and, when the server announces a non-UTF-8 encoding, garbles the curly quotes and the middle dot, which breaks reading the "Redlined by <name> · <date>" footer from an opened PDF (author came back as "Gerald C. Fraas · 10/30/2026").
 - `python3 tools/make_index.py` builds `index.html` from `app.html`: adds the shell and the same CSS reset the viewer uses, escapes every non-ASCII character so the file reads correctly whatever encoding the server announces, stamps the version (last commit that touched `app.html`, plus the date) and drops the claude.ai-only meta tag. `--check` exits 1 if `index.html` is stale. Run it after every change to `app.html` and commit both files.
 - The page footer reads "NERedliner · version <commit · date> · Your PDFs and edits stay in this browser; nothing is uploaded." In `app.html` and the artifact it shows no version (`APP_VERSION='dev'`).
@@ -58,3 +58,6 @@ Owner: Gerald Fraas, Nebraska State Legislature. Browser tool to open a bill or 
 - Check the page 1 rule against a real bill whose summary ends on page 1 (ask for one). Bill drafts saved before this change have a fixed `firstN` and no `enactBreak`, so they keep the old behavior.
 - Justified spacing matches the original exactly on LB650. It may still differ on documents not yet tested.
 - The README still lists `src/`, `tools/` and `tests/`. It should be corrected or the folders re-created.
+
+## Unofficial redline markings (11/19/2026)
+Approved scope: unofficial-document disclaimer above source/date on every page, including change pages; Redline after LB and AM identifiers in running headers and first-page titles; an on-screen notice. Preserve source dates, label first-reading dates and year-only information, and explicitly identify missing dates. Do not substitute save dates. Do not change existing drag-and-drop, PDF opening, metadata, filenames, numbered text or other styling. The personal working-draft feature is separate. Presentation extension: tools/unofficial-extension.js, appended to app.html. Browser tests: tools/unofficial_test.cjs.

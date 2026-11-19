@@ -1,0 +1,33 @@
+PASS On-screen notice
+PASS Idempotent labels
+PASS Filename unchanged
+PASS bill disclaimer above source
+PASS bill header label
+PASS bill title label
+PASS bill model unchanged by rendering
+PASS bill numbered text unchanged
+PASS bill source date
+PASS bill change page marked
+PASS bill valid PDF
+PASS bill round-trip body
+PASS bill source preserved
+PASS bill notices not imported as headers
+PASS bill no duplicate Redline
+PASS bill gray PDF notice
+PASS amendment disclaimer above source
+PASS amendment header label
+PASS amendment title label
+PASS amendment model unchanged by rendering
+PASS amendment numbered text unchanged
+PASS amendment source date
+PASS amendment change page marked
+PASS amendment valid PDF
+PASS amendment round-trip body
+PASS amendment source preserved
+PASS amendment notices not imported as headers
+PASS amendment no duplicate Redline
+PASS amendment gray PDF notice
+PASS Missing date explicit
+PASS First-reading date labeled
+ALL CHECKS PASSED: 31
+Build result: success
